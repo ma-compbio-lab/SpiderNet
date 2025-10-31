@@ -1,0 +1,21 @@
+# Use PyTorch 2.0.1 with CUDA 11.7
+--index-url https://download.pytorch.org/whl/cu117
+torch==2.0.1+cu117
+torchvision==0.15.2+cu117
+torchaudio==2.0.2+cu117
+
+# Additional dependencies
+torch_scatter==2.1.2
+torch-geometric==2.6.1
+numpy==1.26.4
+scikit-learn==1.5.2
+scipy==1.15.3
+pandas==2.2.3
+scanpy==1.11.1
+matplotlib==3.10.3
+seaborn==0.13.2
+scikit-misc==0.5.1
+igraph==0.11.8
+louvain==0.8.2
+gseapy==1.1.10
+squidpy==1.6.5
