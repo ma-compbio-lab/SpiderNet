@@ -18,3 +18,4 @@ It enables discovery of directional, biologically meaningful communication modul
 You can install **SpiderNet** directly from PyPI:
 ```bash
 pip install SpiderNet
+```
