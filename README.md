@@ -5,6 +5,10 @@ It enables discovery of directional, biologically meaningful communication modul
 
 ---
 
+[BrainGMTv2_wGO_MouseOrthologs.gmt.txt.zip](https://github.com/user-attachments/files/23266775/BrainGMTv2_wGO_MouseOrthologs.gmt.txt.zip)
+<img width="1013" height="610" alt="SpiderNet_V2 (2)" src="https://github.com/user-attachments/assets/8d42fa0f-99bd-44fa-acb8-5453fc1328d4" />
+
+
 ## Features
 
 - Learns meta-interactions (sender regulators to ligand-receptor bridges to receiver targets)
