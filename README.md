@@ -5,6 +5,8 @@ It enables discovery of directional, biologically meaningful communication modul
 
 ---
 
+The following figure illustrates the overall architecture of **SpiderNet**:
+
 <img width="1013" height="610" alt="SpiderNet_V2 (2)" src="https://github.com/user-attachments/assets/8d42fa0f-99bd-44fa-acb8-5453fc1328d4" />
 
 
@@ -25,4 +27,4 @@ pip install SpiderNet
 
 ## Tutorials
 
-...
+Please refer to ...
