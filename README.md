@@ -3,7 +3,8 @@
 
 # Overview
 
-[SpiderNet_figure_1_v3 (1).pdf](https://github.com/user-attachments/files/23633803/SpiderNet_figure_1_v3.1.pdf)
+<img width="1222" height="713" alt="SpiderNet_V2" src="https://github.com/user-attachments/assets/bf13203c-be25-4554-b98f-ec885f47db1f" />
+
 
 
 **SpiderNet** is an interpretable deep learning framework for learning cell-cell meta-interactions (MIs) from spatial omics data. Specifically, SpiderNet inputs a spatial cell--cell graph and gene expression. The encoder maps sender/receiver expression to MI strengths. The decoder aggregates MIs to reconstruct ligand--receptor co-expression and gene expression. Nonnegative loadings make intrinsic, regulator, and target components interpretable. The resulting MIs and loadings enable diverse downstream applications including MI-associated pathway inference, cell subtype identification, in silico perturbation, MI cascade detection, and phenotype prediction.
