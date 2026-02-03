@@ -18,7 +18,7 @@ def flake8(session):
         "flake8-use-fstring",
         "pep8-naming",
     )
-    session.run("flake8", "SpyderNet/")
+    session.run("flake8", "SpiderNet/")
 
 
 @nox.session(reuse_venv=True)
