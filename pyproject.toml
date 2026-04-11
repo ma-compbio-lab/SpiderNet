@@ -1,0 +1,108 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "spidernet"
+dynamic = ["version"]
+
+description = "Interpretable framework for learning cell–cell meta-interactions from spatial omics data"
+readme = "README.md"
+requires-python = ">=3.12"
+
+license = { file="LICENSE" }
+
+authors = [
+    { name = "Junjie Tang", email = "junjieta@andrew.cmu.edu" },
+    { name = "Shahul Alam", email = "alam.shahul@gmail.com" }
+]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    "torch<=2.6",
+    "torchvision",
+    "torchaudio",
+    "torch_scatter @ https://data.pyg.org/whl/torch-2.6.0%2Bcu118/torch_scatter-2.1.2+pt26cu118-cp312-cp312-linux_x86_64.whl",
+    "torch-geometric",
+    "numpy",
+    "scikit-learn",
+    "scipy",
+    "pandas",
+    "scanpy",
+    "matplotlib",
+    "seaborn",
+    "scikit-misc",
+    "igraph",
+    "louvain",
+    "gseapy",
+    "squidpy",
+]
+
+[project.urls]
+Homepage = "https://github.com/junjie-sml/SpiderNet"
+Repository = "https://github.com/junjie-sml/SpiderNet"
+
+
+[tool.hatch.version]
+path = "SpiderNet/__about__.py"
+
+[tool.hatch.metadata]
+allow-direct-references = true
+
+[tool.flake8]
+max-line-length = 120
+count = true
+extend-ignore = [
+    "E203",  # conflicting with black style slicing
+    "D107",  # only need docstring at class level, no need at __init__
+]
+exclude = [
+    ".nox",
+    ".git",
+    "__pycache__",
+    "build",
+    "dist",
+    "*.pyc",
+    "*.egg-info",
+    ".eggs",
+]
+
+[tool.black]
+line-length = 120
+preview = true
+
+[tool.isort]
+profile = "black"
+line_length = 120
+
+[tool.pytest.ini_options]
+markers = [
+    "integration: marks tests for entire SpiderNet pipeline"
+]
+
+# Dev requirements
+[dependency-groups]
+dev = [
+    "ipdb",
+    "ipython",
+    "nox",
+    "pre-commit",
+    "pytest",
+]
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "SpiderNet/*.py",
+]
+
+[tool.hatch.build.targets.wheel]
+include = [
+  "SpiderNet/*.py",
+]
