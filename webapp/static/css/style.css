@@ -835,3 +835,43 @@ kbd {
         opacity: 1;
     }
 }
+
+/* ===================================
+   Team Page Styles
+   =================================== */
+
+/* Team member photo styling */
+.team-member-photo {
+    transition: all var(--transition-base);
+}
+
+.team-member-photo:hover {
+    transform: scale(1.05);
+    box-shadow: 0 8px 16px rgba(59, 130, 246, 0.3) !important;
+}
+
+/* Fallback for inline styled images */
+img.rounded-circle {
+    transition: all var(--transition-base);
+}
+
+img.rounded-circle:hover {
+    transform: scale(1.05);
+}
+
+/* Team member cards */
+.text-center.h-100 {
+    transition: all var(--transition-base);
+}
+
+.text-center.h-100:hover {
+    box-shadow: var(--shadow-md);
+    transform: translateY(-4px);
+}
+
+/* Honor badges */
+.badge.bg-info {
+    font-size: 0.85rem;
+    font-weight: 500;
+    padding: 0.35rem 0.65rem;
+}
