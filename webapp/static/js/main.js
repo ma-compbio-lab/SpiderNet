@@ -257,12 +257,15 @@ function initSearchAndFilter() {
     $('.plot-card').each(function(idx) {
         const $card = $(this);
         const $section = $card.closest('.section-container');
+        const sectionId = $section.attr('id') || '';
+
         plots.push({
             element: this,
+            columnElement: $card.parent()[0], // Store the parent column div
             title: $card.find('.plot-title').text().toLowerCase(),
             description: $card.find('.plot-description').text().toLowerCase(),
             section: $section.find('.section-title').text().trim(),
-            sectionId: $section.attr('id') || $section.find('.section-title').text().toLowerCase().replace(/\s+/g, '-')
+            sectionId: sectionId
         });
     });
 
@@ -296,6 +299,10 @@ function initSearchAndFilter() {
         let visibleCount = 0;
         let totalCount = plots.length;
 
+        // First, reset visibility: show all sections and columns
+        $('.section-container').show();
+        $('.col-md-6, .col-lg-4, .col-xl-3').show();
+
         plots.forEach(plot => {
             const matchesQuery = query === '' ||
                 plot.title.includes(query) ||
@@ -305,10 +312,10 @@ function initSearchAndFilter() {
                 plot.sectionId === sectionFilter;
 
             if (matchesQuery && matchesSection) {
-                $(plot.element).show();
+                $(plot.columnElement).show(); // Show the column div
                 visibleCount++;
             } else {
-                $(plot.element).hide();
+                $(plot.columnElement).hide(); // Hide the column div
             }
         });
 
@@ -319,13 +326,14 @@ function initSearchAndFilter() {
             $searchResultsText.text('All plots shown');
         }
 
-        // Hide empty sections
+        // Hide empty sections - check column visibility
         $('.section-container').each(function() {
-            const visiblePlots = $(this).find('.plot-card:visible').length;
-            if (visiblePlots > 0) {
-                $(this).show();
+            const $section = $(this);
+            const visibleColumns = $section.find('.col-md-6:visible, .col-lg-4:visible, .col-xl-3:visible').length;
+            if (visibleColumns > 0) {
+                $section.show();
             } else {
-                $(this).hide();
+                $section.hide();
             }
         });
     }
