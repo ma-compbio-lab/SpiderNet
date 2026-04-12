@@ -551,3 +551,71 @@ a:focus {
     outline: 2px solid var(--accent-color);
     outline-offset: 2px;
 }
+
+/* ===================================
+   Main Page Specific Styles
+   =================================== */
+
+/* Dataset cards on main page */
+.dataset-card {
+    transition: all var(--transition-base);
+    border: 1px solid var(--border-light) !important;
+}
+
+.dataset-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-lg) !important;
+}
+
+.dataset-card .card-header {
+    border-bottom: none;
+}
+
+.dataset-card .card-body {
+    padding: 1.25rem;
+}
+
+/* Code blocks styling */
+pre {
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    line-height: 1.5;
+}
+
+pre code {
+    color: inherit;
+    background: transparent;
+    padding: 0;
+}
+
+/* Method figure styling */
+.card-body a img.rounded {
+    transition: all var(--transition-base);
+    border: 1px solid var(--border-light);
+}
+
+.card-body a img.rounded:hover {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-md);
+}
+
+/* Analysis workflow cards */
+#analyses-section .card {
+    transition: all var(--transition-base);
+}
+
+#analyses-section .card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+/* Responsive improvements for main page */
+@media (max-width: 991.98px) {
+    .col-lg-7 {
+        margin-bottom: 1.5rem;
+    }
+
+    h1.display-5 {
+        font-size: 2rem;
+    }
+}
