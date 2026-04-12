@@ -1,0 +1,47 @@
+<!-- Search and Filter Panel -->
+<div class="search-panel card shadow-sm mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-center">
+            <div class="col-md-6">
+                <div class="input-group">
+                    <span class="input-group-text bg-white border-end-0">
+                        <i class="fas fa-search text-muted"></i>
+                    </span>
+                    <input type="search"
+                           class="form-control border-start-0"
+                           id="plotSearch"
+                           placeholder="Search plots by title, description, or keywords..."
+                           aria-label="Search plots">
+                </div>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" id="filterSection" aria-label="Filter by section">
+                    <option value="">All Sections</option>
+                    {% for section_name in sections.keys() %}
+                    <option value="{{ section_name|lower|replace(' ', '-') }}">{{ section_name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" id="sortPlots" aria-label="Sort plots">
+                    <option value="default">Default Order</option>
+                    <option value="name-asc">Name (A-Z)</option>
+                    <option value="name-desc">Name (Z-A)</option>
+                </select>
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-12">
+                <div class="d-flex justify-content-between align-items-center">
+                    <small class="text-muted" id="searchResults">
+                        <i class="fas fa-info-circle me-1"></i>
+                        <span id="searchResultsText">All plots shown</span>
+                    </small>
+                    <button class="btn btn-sm btn-outline-secondary" id="clearSearch">
+                        <i class="fas fa-times me-1"></i> Clear Filters
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>

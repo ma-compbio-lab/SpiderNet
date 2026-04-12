@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+
+{% block title %}Page Not Found - {{ app_title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <div class="row justify-content-center" style="padding: 5rem 0;">
+        <div class="col-md-8 text-center">
+            <div class="error-container">
+                <i class="fas fa-exclamation-triangle fa-5x text-warning mb-4" style="opacity: 0.8;"></i>
+                <h1 class="display-3 mb-3">404</h1>
+                <h2 class="h4 mb-4 text-muted">Page Not Found</h2>
+                <p class="lead mb-4">
+                    The page you're looking for doesn't exist or has been moved.
+                </p>
+                <p class="text-muted mb-5">
+                    This might have happened because the dataset was deleted, renamed, or the URL is incorrect.
+                </p>
+                <div class="d-flex justify-content-center gap-3">
+                    <a href="{{ url_for('index') }}" class="btn btn-primary btn-lg">
+                        <i class="fas fa-home me-2"></i> Go to Home
+                    </a>
+                    <a href="javascript:history.back()" class="btn btn-outline-secondary btn-lg">
+                        <i class="fas fa-arrow-left me-2"></i> Go Back
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+.error-container {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+</style>
+{% endblock %}

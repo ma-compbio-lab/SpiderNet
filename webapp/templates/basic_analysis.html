@@ -4,6 +4,10 @@
 
 {% block content %}
 <div class="container-fluid">
+    <!-- Breadcrumb -->
+    {% set analysis_type = 'basic' %}
+    {% include 'components/breadcrumb.html' %}
+
     <!-- Page Header -->
     <div class="row mb-4">
         <div class="col-12">
@@ -26,6 +30,9 @@
         </div>
     </div>
 
+    <!-- Search and Filter Panel -->
+    {% include 'components/search_panel.html' %}
+
     <!-- Sections -->
     {% if sections %}
         {% for section_name, plots in sections.items() %}
@@ -39,34 +46,61 @@
             <div class="row g-3">
                 {% for plot in plots %}
                 <div class="col-md-6 col-lg-4 col-xl-3">
-                    <div class="plot-card">
+                    <div class="plot-card" data-plot-title="{{ plot.title }}">
                         <div class="plot-image-container">
                             <img src="{{ generate_plot_url(dataset_name, plot.path) }}"
                                  alt="{{ plot.title }}"
+                                 loading="lazy"
                                  class="plot-image"
                                  data-title="{{ plot.title }}"
                                  data-pdf-available="{{ plot.pdf_available }}"
                                  data-pdf-path="{{ plot.path.replace('.png', '.pdf') }}">
                             <div class="plot-overlay">
-                                <button class="btn btn-sm btn-light">
-                                    <i class="fas fa-search-plus"></i> Enlarge
+                                <button class="btn btn-sm btn-light me-2">
+                                    <i class="fas fa-search-plus"></i> View
                                 </button>
+                                {% if plot.pdf_available %}
+                                <a href="{{ generate_plot_url(dataset_name, plot.path.replace('.png', '.pdf')) }}"
+                                   class="btn btn-sm btn-light"
+                                   target="_blank"
+                                   title="Download PDF">
+                                    <i class="fas fa-file-pdf"></i>
+                                </a>
+                                {% endif %}
                             </div>
                         </div>
-                        <div class="plot-title">{{ plot.title }}</div>
+                        <div class="plot-title">
+                            {{ plot.title }}
+                            <button class="btn-copy-title"
+                                    onclick="copyPlotTitle(this, '{{ plot.title }}')"
+                                    title="Copy title"
+                                    aria-label="Copy plot title">
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
                         <div class="plot-description">
                             <i class="fas fa-info-circle me-1"></i>
                             {{ plot.description }}
                         </div>
-                        {% if plot.pdf_available %}
                         <div class="plot-actions">
-                            <a href="{{ generate_plot_url(dataset_name, plot.path.replace('.png', '.pdf')) }}"
-                               class="btn btn-sm btn-outline-primary"
-                               target="_blank">
-                                <i class="fas fa-file-pdf me-1"></i> PDF
-                            </a>
+                            <div class="btn-group w-100" role="group">
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        onclick="downloadPlot('{{ generate_plot_url(dataset_name, plot.path) }}', '{{ plot.title }}')"
+                                        title="Download PNG">
+                                    <i class="fas fa-download"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        onclick="copyPlotLink(this, '{{ plot.path }}')"
+                                        title="Copy link">
+                                    <i class="fas fa-link"></i>
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        onclick="sharePlot('{{ plot.title }}', '{{ plot.path }}')"
+                                        title="Share plot">
+                                    <i class="fas fa-share-alt"></i>
+                                </button>
+                            </div>
                         </div>
-                        {% endif %}
                     </div>
                 </div>
                 {% endfor %}

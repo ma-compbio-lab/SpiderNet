@@ -11,6 +11,9 @@ $(document).ready(function() {
 
     // Initialize keyboard navigation
     initKeyboardNav();
+
+    // Initialize search and filter functionality
+    initSearchAndFilter();
 });
 
 
@@ -89,28 +92,68 @@ function initLazyLoading() {
 
 
 /**
- * Initialize keyboard navigation for modal
+ * Initialize keyboard navigation for modal and global shortcuts
  */
 function initKeyboardNav() {
     $(document).on('keydown', function(e) {
         // Check if modal is open
         const modal = document.getElementById('imageModal');
-        if (!modal || !modal.classList.contains('show')) {
+        const isModalOpen = modal && modal.classList.contains('show');
+
+        // Ignore if user is typing in an input
+        if ($(e.target).is('input, textarea')) {
+            if (e.key === 'Escape') {
+                e.target.blur();
+            }
             return;
         }
 
-        // ESC key - close modal
-        if (e.key === 'Escape') {
-            bootstrap.Modal.getInstance(modal).hide();
+        // Global shortcuts (work everywhere)
+        if (e.key === '?' && !isModalOpen) {
+            e.preventDefault();
+            showKeyboardHelp();
+            return;
         }
 
-        // Arrow keys - navigate between images (future enhancement)
-        // if (e.key === 'ArrowLeft') {
-        //     // Previous image
-        // }
-        // if (e.key === 'ArrowRight') {
-        //     // Next image
-        // }
+        if ((e.key === '/' || e.key.toLowerCase() === 's') && !isModalOpen) {
+            e.preventDefault();
+            const searchBox = document.getElementById('plotSearch');
+            if (searchBox) {
+                searchBox.focus();
+            }
+            return;
+        }
+
+        // Modal-specific shortcuts
+        if (isModalOpen) {
+            // ESC key - close modal
+            if (e.key === 'Escape') {
+                bootstrap.Modal.getInstance(modal).hide();
+                return;
+            }
+
+            // F key - toggle fullscreen
+            if (e.key.toLowerCase() === 'f') {
+                e.preventDefault();
+                const img = modal.querySelector('#modalImage');
+                if (img && img.requestFullscreen) {
+                    if (document.fullscreenElement) {
+                        document.exitFullscreen();
+                    } else {
+                        img.requestFullscreen();
+                    }
+                }
+                return;
+            }
+
+            // Arrow keys - navigate between images (future enhancement)
+            // if (e.key === 'ArrowLeft') {
+            //     // Previous image
+            // }
+            // if (e.key === 'ArrowRight') {
+            //     // Next image
+            // }
+        }
     });
 }
 
@@ -198,6 +241,123 @@ function debounce(func, wait) {
 
 
 /**
+ * Initialize search and filter functionality
+ */
+function initSearchAndFilter() {
+    const $plotSearch = $('#plotSearch');
+    const $filterSection = $('#filterSection');
+    const $sortPlots = $('#sortPlots');
+    const $clearSearch = $('#clearSearch');
+    const $searchResultsText = $('#searchResultsText');
+
+    if (!$plotSearch.length) return; // Exit if search panel not present
+
+    // Collect all plots data for searching
+    const plots = [];
+    $('.plot-card').each(function(idx) {
+        const $card = $(this);
+        const $section = $card.closest('.section-container');
+        plots.push({
+            element: this,
+            title: $card.find('.plot-title').text().toLowerCase(),
+            description: $card.find('.plot-description').text().toLowerCase(),
+            section: $section.find('.section-title').text().trim(),
+            sectionId: $section.attr('id') || $section.find('.section-title').text().toLowerCase().replace(/\s+/g, '-')
+        });
+    });
+
+    // Search functionality
+    $plotSearch.on('input', debounce(function() {
+        performSearch();
+    }, 300));
+
+    // Section filter
+    $filterSection.on('change', function() {
+        performSearch();
+    });
+
+    // Sort functionality
+    $sortPlots.on('change', function() {
+        performSort($(this).val());
+    });
+
+    // Clear button
+    $clearSearch.on('click', function() {
+        $plotSearch.val('');
+        $filterSection.val('');
+        $sortPlots.val('default');
+        performSearch();
+    });
+
+    // Perform search
+    function performSearch() {
+        const query = $plotSearch.val().toLowerCase();
+        const sectionFilter = $filterSection.val();
+        let visibleCount = 0;
+        let totalCount = plots.length;
+
+        plots.forEach(plot => {
+            const matchesQuery = query === '' ||
+                plot.title.includes(query) ||
+                plot.description.includes(query);
+
+            const matchesSection = sectionFilter === '' ||
+                plot.sectionId === sectionFilter;
+
+            if (matchesQuery && matchesSection) {
+                $(plot.element).show();
+                visibleCount++;
+            } else {
+                $(plot.element).hide();
+            }
+        });
+
+        // Update results text
+        if (query || sectionFilter) {
+            $searchResultsText.html(`Found <strong>${visibleCount}</strong> of ${totalCount} plots`);
+        } else {
+            $searchResultsText.text('All plots shown');
+        }
+
+        // Hide empty sections
+        $('.section-container').each(function() {
+            const visiblePlots = $(this).find('.plot-card:visible').length;
+            if (visiblePlots > 0) {
+                $(this).show();
+            } else {
+                $(this).hide();
+            }
+        });
+    }
+
+    // Perform sort
+    function performSort(sortType) {
+        $('.section-container').each(function() {
+            const $section = $(this);
+            const $plotsContainer = $section.find('.row.g-3');
+            const $plots = $plotsContainer.find('.col-md-6, .col-lg-4, .col-xl-3');
+
+            const sortedPlots = $plots.sort(function(a, b) {
+                const titleA = $(a).find('.plot-title').text();
+                const titleB = $(b).find('.plot-title').text();
+
+                switch(sortType) {
+                    case 'name-asc':
+                        return titleA.localeCompare(titleB);
+                    case 'name-desc':
+                        return titleB.localeCompare(titleA);
+                    default:
+                        return 0; // Keep original order
+                }
+            });
+
+            $plotsContainer.append(sortedPlots);
+        });
+    }
+}
+
+
+/**
  * Filter plots by keyword (for future search feature)
  */
 function filterPlots(keyword) {
@@ -217,6 +377,136 @@ function filterPlots(keyword) {
 }
 
 
+/**
+ * Copy plot title to clipboard
+ */
+function copyPlotTitle(button, title) {
+    navigator.clipboard.writeText(title).then(() => {
+        // Visual feedback
+        const $btn = $(button);
+        const originalHTML = $btn.html();
+        $btn.html('<i class="fas fa-check"></i>');
+        $btn.addClass('text-success');
+
+        setTimeout(() => {
+            $btn.html(originalHTML);
+            $btn.removeClass('text-success');
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy:', err);
+    });
+}
+
+
+/**
+ * Download plot image
+ */
+function downloadPlot(url, title) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = title.replace(/[^a-z0-9]/gi, '_').toLowerCase() + '.png';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+
+/**
+ * Copy plot link to clipboard
+ */
+function copyPlotLink(button, plotPath) {
+    const url = window.location.origin + window.location.pathname + '#' + encodeURIComponent(plotPath);
+
+    navigator.clipboard.writeText(url).then(() => {
+        // Visual feedback
+        const $btn = $(button);
+        $btn.find('i').removeClass('fa-link').addClass('fa-check');
+        $btn.addClass('text-success');
+
+        setTimeout(() => {
+            $btn.find('i').removeClass('fa-check').addClass('fa-link');
+            $btn.removeClass('text-success');
+        }, 2000);
+    }).catch(err => {
+        console.error('Failed to copy link:', err);
+    });
+}
+
+
+/**
+ * Share plot using Web Share API or fallback
+ */
+function sharePlot(title, path) {
+    const url = window.location.origin + window.location.pathname + '#' + encodeURIComponent(path);
+
+    if (navigator.share) {
+        navigator.share({
+            title: `SpiderNet Plot: ${title}`,
+            text: `Check out this SpiderNet analysis plot: ${title}`,
+            url: url
+        }).catch(err => {
+            if (err.name !== 'AbortError') {
+                console.error('Share failed:', err);
+            }
+        });
+    } else {
+        // Fallback: copy to clipboard
+        navigator.clipboard.writeText(url).then(() => {
+            alert('Link copied to clipboard!');
+        });
+    }
+}
+
+
+/**
+ * Show keyboard shortcuts help
+ */
+function showKeyboardHelp() {
+    const helpHTML = `
+        <div class="keyboard-shortcuts-help">
+            <h5 class="mb-3"><i class="fas fa-keyboard me-2"></i>Keyboard Shortcuts</h5>
+            <table class="table table-sm">
+                <tbody>
+                    <tr>
+                        <td><kbd>?</kbd></td>
+                        <td>Show this help</td>
+                    </tr>
+                    <tr>
+                        <td><kbd>Esc</kbd></td>
+                        <td>Close modal or dialog</td>
+                    </tr>
+                    <tr>
+                        <td><kbd>← →</kbd></td>
+                        <td>Navigate between plots (in modal)</td>
+                    </tr>
+                    <tr>
+                        <td><kbd>/</kbd> or <kbd>S</kbd></td>
+                        <td>Focus search box</td>
+                    </tr>
+                    <tr>
+                        <td><kbd>F</kbd></td>
+                        <td>Toggle fullscreen (when image open)</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    // Show in modal (reusing image modal)
+    $('#imageModalLabel').html('<i class="fas fa-keyboard me-2"></i>Keyboard Shortcuts');
+    $('#modalImage').replaceWith(helpHTML);
+    $('#downloadPdf').hide();
+
+    const modal = new bootstrap.Modal(document.getElementById('imageModal'));
+    modal.show();
+
+    // Restore modal on close
+    $('#imageModal').one('hidden.bs.modal', function() {
+        $('.keyboard-shortcuts-help').replaceWith('<img id="modalImage" src="" class="img-fluid" alt="Plot">');
+    });
+}
+
+
 // Export functions for global use
 window.SpiderNetViewer = {
     showLoading,
@@ -226,3 +516,10 @@ window.SpiderNetViewer = {
     formatNumber,
     filterPlots
 };
+
+// Make action functions globally available
+window.copyPlotTitle = copyPlotTitle;
+window.downloadPlot = downloadPlot;
+window.copyPlotLink = copyPlotLink;
+window.sharePlot = sharePlot;
+window.showKeyboardHelp = showKeyboardHelp;

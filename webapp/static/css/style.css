@@ -619,3 +619,219 @@ pre code {
         font-size: 2rem;
     }
 }
+
+/* ===================================
+   Search Panel Styles
+   =================================== */
+
+.search-panel {
+    position: sticky;
+    top: 70px;
+    z-index: 100;
+    background: var(--surface-color);
+    border: none;
+    transition: box-shadow var(--transition-base);
+}
+
+.search-panel:hover {
+    box-shadow: var(--shadow-md);
+}
+
+.search-panel .input-group-text {
+    border: 1px solid var(--border-color);
+}
+
+.search-panel .form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.15);
+}
+
+.search-panel .form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.15);
+}
+
+#searchResults strong {
+    color: var(--primary-color);
+    font-weight: 600;
+}
+
+/* Empty state for search results */
+.search-panel + .section-container:only-of-type.d-none + .row {
+    text-align: center;
+    padding: 3rem 0;
+    color: var(--text-muted);
+}
+
+/* Loading state for plots */
+.plot-card.loading {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.plot-card.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 30px;
+    height: 30px;
+    border: 3px solid var(--border-light);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+/* ===================================
+   Breadcrumb Styles
+   =================================== */
+
+.breadcrumb {
+    background-color: var(--background-color);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-md);
+    margin-bottom: 1.5rem;
+    font-size: 0.9rem;
+}
+
+.breadcrumb-item + .breadcrumb-item::before {
+    content: "›";
+    color: var(--text-muted);
+    font-size: 1.2em;
+}
+
+.breadcrumb-item a {
+    color: var(--primary-color);
+    text-decoration: none;
+    transition: color var(--transition-fast);
+}
+
+.breadcrumb-item a:hover {
+    color: var(--primary-hover);
+    text-decoration: underline;
+}
+
+.breadcrumb-item.active {
+    color: var(--text-color);
+    font-weight: 500;
+}
+
+.breadcrumb-item .text-muted {
+    font-weight: 600;
+    color: var(--text-color) !important;
+}
+
+/* ===================================
+   Enhanced Plot Card Actions
+   =================================== */
+
+.plot-title {
+    position: relative;
+    padding-right: 2rem;
+}
+
+.btn-copy-title {
+    position: absolute;
+    right: 0;
+    top: 50%;
+    transform: translateY(-50%);
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    padding: 0.25rem 0.5rem;
+    cursor: pointer;
+    opacity: 0;
+    transition: all var(--transition-fast);
+}
+
+.plot-card:hover .btn-copy-title {
+    opacity: 1;
+}
+
+.btn-copy-title:hover {
+    color: var(--primary-color);
+}
+
+.btn-copy-title.text-success {
+    opacity: 1 !important;
+}
+
+.plot-actions {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-light);
+}
+
+.plot-actions .btn-group {
+    box-shadow: none;
+}
+
+.plot-actions .btn {
+    transition: all var(--transition-fast);
+}
+
+.plot-actions .btn:hover {
+    transform: translateY(-1px);
+    background-color: var(--primary-light);
+    color: var(--primary-color);
+    border-color: var(--primary-color);
+}
+
+/* Keyboard shortcuts styling */
+kbd {
+    background-color: var(--background-color);
+    border: 1px solid var(--border-color);
+    border-radius: 3px;
+    box-shadow: 0 1px 0 var(--border-color);
+    color: var(--text-color);
+    display: inline-block;
+    font-family: monospace;
+    font-size: 0.85em;
+    font-weight: 600;
+    line-height: 1;
+    padding: 2px 6px;
+    white-space: nowrap;
+}
+
+.keyboard-shortcuts-help {
+    padding: 2rem;
+}
+
+.keyboard-shortcuts-help table {
+    margin-bottom: 0;
+}
+
+.keyboard-shortcuts-help td:first-child {
+    width: 100px;
+    font-weight: 600;
+}
+
+/* Toast-style notifications */
+.plot-notification {
+    position: fixed;
+    bottom: 2rem;
+    right: 2rem;
+    background: var(--surface-color);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1rem 1.5rem;
+    box-shadow: var(--shadow-lg);
+    z-index: 1060;
+    animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
