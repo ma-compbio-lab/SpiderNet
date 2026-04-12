@@ -88,6 +88,7 @@ def categorize_plots(results_dir):
         plot = {
             "filename": filename,
             "title": format_plot_title(filename),
+            "description": get_plot_description(filename),
             "path": str(relative_path),
             "full_path": str(png_file),
             "pdf_available": png_file.with_suffix('.pdf').exists(),
@@ -145,6 +146,134 @@ def is_cascade_analysis_plot(filename, relative_path):
     ]
 
     return any(pattern in filename_lower or pattern in path_str for pattern in cascade_patterns)
+
+
+def get_plot_description(filename):
+    """
+    Get detailed description for a plot based on its filename.
+
+    Args:
+        filename: str, plot filename
+
+    Returns:
+        str: Description of what the plot shows
+    """
+    name_lower = filename.lower()
+
+    # Basic Analysis Descriptions
+    if "correlation" in name_lower and "mi" in name_lower:
+        return "Correlation matrix showing relationships between different meta-interactions (MIs). Positive correlations indicate MIs that tend to co-occur."
+
+    if "lr_loading" in name_lower or "loading" in name_lower:
+        return "Ligand-receptor (LR) pathway loading scores showing which LR pathways are enriched in each meta-interaction."
+
+    if "avg_mi_cellclass_pair" in name_lower:
+        return "Average meta-interaction strengths across different sender-receiver cell type pairs. Shows which cell-cell communications are mediated by each MI."
+
+    if "avg_mi_heatmap" in name_lower:
+        return "Heatmap showing average MI activity patterns across cell types and spatial contexts."
+
+    # Subtype Analysis - Cluster Overview
+    if "cluster" in name_lower and "malignant" in name_lower and "umap" not in name_lower:
+        return "Malignant cell clustering assignments based on MI profiles. Each cluster represents a distinct subtype with unique communication patterns."
+
+    # Subtype Analysis - UMAP Visualizations
+    if "umap" in name_lower and "cellsubtype" in name_lower:
+        if "mi_umap" in name_lower:
+            return "UMAP projection of malignant cells using MI profiles. Cell subtypes identified by their meta-interaction communication patterns."
+        elif "banksy" in name_lower:
+            return "UMAP projection using Banksy spatial features. Shows how cells cluster based on their spatial neighborhood composition."
+        elif "x_umap" in name_lower:
+            return "UMAP projection using gene expression data. Shows transcriptional variation across malignant cells."
+
+    if "malignant_c5" in name_lower and "umap" in name_lower:
+        if "mi_umap" in name_lower:
+            return "Highlight of malignant subtype C5 cells in MI-UMAP space. Shows spatial distribution of this specific subtype."
+        elif "banksy" in name_lower:
+            return "Highlight of malignant subtype C5 cells in Banksy-UMAP space based on neighborhood features."
+        elif "x_umap" in name_lower:
+            return "Highlight of malignant subtype C5 cells in gene expression UMAP space."
+
+    # Neighboring Cell Proportions
+    if "neighboring" in name_lower and "umap" in name_lower:
+        cell_type = ""
+        if "b.cell" in name_lower:
+            cell_type = "B cells"
+        elif "endothelial" in name_lower:
+            cell_type = "endothelial cells"
+        elif "fibroblast" in name_lower:
+            cell_type = "fibroblasts"
+        elif "monocyte" in name_lower:
+            cell_type = "monocytes"
+        elif "tnk.cell" in name_lower:
+            cell_type = "T/NK cells"
+        elif "mast.cell" in name_lower:
+            cell_type = "mast cells"
+        elif "malignant" in name_lower:
+            cell_type = "malignant cells"
+
+        if "mi_umap" in name_lower:
+            return f"Proportion of neighboring {cell_type} overlaid on MI-UMAP. Shows how neighborhood composition correlates with MI-based subtypes."
+        elif "banksy" in name_lower:
+            return f"Proportion of neighboring {cell_type} overlaid on Banksy-UMAP. Spatial neighborhood features drive this embedding."
+        elif "x_umap" in name_lower:
+            return f"Proportion of neighboring {cell_type} overlaid on gene expression UMAP."
+
+    # Clinical Metadata
+    if "stage" in name_lower and "umap" in name_lower:
+        return "Cancer stage information overlaid on UMAP. Shows whether MI-based subtypes correlate with disease stage."
+
+    if "site" in name_lower and "umap" in name_lower:
+        return "Tumor site (anatomical location) overlaid on UMAP. Reveals site-specific patterns in cell subtypes."
+
+    if "outcome" in name_lower and "umap" in name_lower:
+        return "Patient outcome information overlaid on UMAP. Links cell subtypes to clinical outcomes."
+
+    if "patient" in name_lower and "umap" in name_lower:
+        return "Patient identity overlaid on UMAP. Shows patient-specific vs. shared subtype patterns."
+
+    if "treatment" in name_lower and "umap" in name_lower:
+        return "Treatment status overlaid on UMAP. Indicates whether subtypes associate with treatment history."
+
+    if "omentum" in name_lower or "stageiv" in name_lower:
+        return "Clinical covariate proportions across MI-based subtypes. Bar plot showing enrichment of specific clinical features."
+
+    # Functional States
+    if "functionalstate" in name_lower and "boxplot" in name_lower:
+        return "Tumor functional state scores (angiogenesis, hypoxia, inflammation, metastasis) across MI-based subtypes. Box plots show distribution per subtype."
+
+    if any(term in name_lower for term in ["angiogenesis", "hypoxia", "inflammation", "metastasis"]) and "receiving" in name_lower:
+        return "Association between tumor functional state and receiving meta-interaction strength. Wilcoxon test compares high vs. low MI activity."
+
+    # CAF Analysis
+    if "caf" in name_lower and "sending" in name_lower:
+        return "Cancer-associated fibroblast (CAF) marker expression vs. sending MI strength. Shows how CAF signaling correlates with specific MIs."
+
+    # In-Silico Perturbation
+    if "perturbation" in name_lower or "insilico" in name_lower:
+        return "Computational perturbation analysis. Predicted effect of modulating specific MI on downstream gene expression or cell states."
+
+    # Cascade Analysis - Colocalization
+    if "colocal" in name_lower:
+        return "MI-MI colocalization network showing which meta-interactions significantly co-occur in spatial neighborhoods, indicating potential cascades."
+
+    # Cascade Analysis - Triplets
+    if "triple" in name_lower and "heatmap" in name_lower:
+        return "Cell type triplet enrichment across MI cascades. Shows prevalence of cell1→cell2→cell3 communication paths."
+
+    # Cascade Analysis - Spatial
+    if "spatial" in name_lower and name_lower.startswith("spatial_"):
+        return "In situ visualization of MI cascade in tissue. Shows spatial localization of specific cell type triplet with highlighted MI activities."
+
+    # Cascade Analysis - LR/Gene Programs
+    if "lrstrength" in name_lower or "ligandexpression" in name_lower or "receptorexpression" in name_lower:
+        return "Ligand-receptor pair expression and activity in MI cascade. Shows which LR pairs mediate the cascade communication."
+
+    if "functional_" in name_lower or "go_" in name_lower:
+        return "Gene program and GO enrichment analysis for cascade target cells. Reveals biological processes activated by the MI cascade."
+
+    # Default
+    return "SpiderNet analysis visualization showing spatial cell-cell communication patterns and meta-interactions."
 
 
 def format_plot_title(filename):

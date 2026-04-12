@@ -25,6 +25,20 @@ def index():
                          app_title=config.APP_TITLE)
 
 
+@app.route('/team')
+def team():
+    """Team page"""
+    return render_template('team.html',
+                         app_title=config.APP_TITLE)
+
+
+@app.route('/paper')
+def paper():
+    """Publication page"""
+    return render_template('paper.html',
+                         app_title=config.APP_TITLE)
+
+
 @app.route('/dataset/<dataset_name>/basic')
 def basic_analysis(dataset_name):
     """Basic analysis plots for selected dataset"""
@@ -110,7 +124,7 @@ def utility_processor():
     def generate_plot_url(dataset_name, plot_path):
         return url_for('serve_result', dataset_name=dataset_name, filepath=plot_path)
 
-    return dict(generate_plot_url=generate_plot_url)
+    return dict(generate_plot_url=generate_plot_url, datasets=DATASETS)
 
 
 @app.errorhandler(404)

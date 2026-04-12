@@ -53,19 +53,59 @@
                     {% endif %}
                 </ul>
 
-                <ul class="navbar-nav">
-                    {% if dataset_name %}
+                <ul class="navbar-nav ms-auto">
+                    {% if not dataset_name %}
+                    <!-- Home page navigation -->
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#analyses-section" role="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-flask me-1"></i> Analyses
+                        </a>
+                        <ul class="dropdown-menu">
+                            <li><a class="dropdown-item" href="#analyses-section" onclick="scrollToSection('basic-card')">
+                                <i class="fas fa-chart-line me-2"></i> Basic Analysis
+                            </a></li>
+                            <li><a class="dropdown-item" href="#analyses-section" onclick="scrollToSection('subtype-card')">
+                                <i class="fas fa-microscope me-2"></i> Subtype Analysis
+                            </a></li>
+                            <li><a class="dropdown-item" href="#analyses-section" onclick="scrollToSection('cascade-card')">
+                                <i class="fas fa-sitemap me-2"></i> MI Cascade
+                            </a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-database me-1"></i> Dataset: {{ dataset_name }}
+                            <i class="fas fa-database me-1"></i> Datasets
                         </a>
-                        <ul class="dropdown-menu dropdown-menu-end">
+                        <ul class="dropdown-menu">
+                            {% if datasets %}
+                            {% for name, info in datasets.items() %}
+                            <li><a class="dropdown-item" href="{{ url_for('basic_analysis', dataset_name=name) }}">
+                                <i class="fas fa-folder me-2"></i> {{ name }}
+                            </a></li>
+                            {% endfor %}
+                            <li><hr class="dropdown-divider"></li>
+                            {% endif %}
                             <li><a class="dropdown-item" href="{{ url_for('index') }}">
                                 <i class="fas fa-home me-2"></i> All Datasets
                             </a></li>
                         </ul>
                     </li>
-                    {% endif %}
+                    <li class="nav-item">
+                        <a class="nav-link" href="https://github.com/ma-compbio-lab/SpiderNet" target="_blank">
+                            <i class="fab fa-github me-1"></i> GitHub
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('team') }}">
+                            <i class="fas fa-users me-1"></i> Team
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="{{ url_for('paper') }}">
+                            <i class="fas fa-file-alt me-1"></i> Paper
+                        </a>
+                    </li>
                 </ul>
             </div>
         </div>

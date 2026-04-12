@@ -54,6 +54,10 @@
                             </div>
                         </div>
                         <div class="plot-title">{{ plot.title }}</div>
+                        <div class="plot-description">
+                            <i class="fas fa-info-circle me-1"></i>
+                            {{ plot.description }}
+                        </div>
                         {% if plot.pdf_available %}
                         <div class="plot-actions">
                             <a href="{{ generate_plot_url(dataset_name, plot.path.replace('.png', '.pdf')) }}"
@@ -79,5 +83,14 @@
         </div>
     </div>
     {% endif %}
+
+    <!-- Back to Home -->
+    <div class="row mb-5">
+        <div class="col-12 text-center">
+            <a href="{{ url_for('index') }}" class="btn btn-lg btn-primary">
+                <i class="fas fa-home me-2"></i> Back to Home
+            </a>
+        </div>
+    </div>
 </div>
 {% endblock %}

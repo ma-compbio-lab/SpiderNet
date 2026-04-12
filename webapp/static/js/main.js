@@ -147,9 +147,18 @@ $(document).on('error', '.plot-image', function() {
 function scrollToSection(sectionId) {
     const element = document.getElementById(sectionId);
     if (element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Close dropdown after clicking
+        const dropdowns = document.querySelectorAll('.dropdown-menu.show');
+        dropdowns.forEach(dropdown => {
+            const bsDropdown = bootstrap.Dropdown.getInstance(dropdown.previousElementSibling);
+            if (bsDropdown) bsDropdown.hide();
+        });
     }
 }
+
+// Make scrollToSection globally accessible
+window.scrollToSection = scrollToSection;
 
 
 /**
