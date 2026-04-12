@@ -1,0 +1,310 @@
+{% extends "base.html" %}
+
+{% block title %}{{ app_title }} - Home{% endblock %}
+
+{% block content %}
+<div class="container">
+    <!-- SpiderNet Introduction -->
+    <div class="row mb-5">
+        <div class="col-12">
+            <h1 class="display-5 mb-4">
+                <i class="fas fa-project-diagram text-primary me-2"></i>
+                SpiderNet: Interpretable modeling of intercellular meta-interactions
+            </h1>
+            <p>
+                SpiderNet is an interpretable framework that learns cell-cell meta-interaction representations from spatial transcriptomics data
+                as directional modules of multicellular regulation. Each meta-interaction represents a latent, coordinated communication module
+                defined over ordered sender-receiver cell pairs, linking sender regulators, ligand-receptor bridges, and receiver targets.
+            </p>
+            <p>
+                By jointly modeling ligand-receptor co-expression and gene expression across ordered cell pairs, SpiderNet anchors latent
+                communication modules to both intercellular signaling and intracellular transcriptional programs. This yields a compact,
+                reusable, and biologically interpretable basis of tissue communication, enabling cross-context communication program comparison,
+                <em>in silico</em> perturbational interrogation of neighboring-cell effects, and detection of multi-hop communication cascades
+                across cell chains.
+            </p>
+            <p>
+                Validated across simulations and diverse real spatial transcriptomics datasets spanning aging brain, cancer, and perturbational
+                settings, SpiderNet provides a general framework for comparing, perturbing, and tracing multicellular regulatory architecture
+                <em>in situ</em> across tissue contexts.
+            </p>
+        </div>
+    </div>
+
+    <!-- Method Figure -->
+    <div class="row mb-5">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-body text-center p-3">
+                    <a href="{{ url_for('static', filename='SpiderNet_figure_1_v6.pdf') }}" target="_blank">
+                        <img src="{{ url_for('static', filename='spidernet_method.png') }}"
+                             alt="SpiderNet Method Overview"
+                             class="img-fluid"
+                             style="max-width: 100%; height: auto; cursor: pointer;">
+                    </a>
+                    <p class="text-muted mt-2 small">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Click image to view full resolution PDF
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Three Analysis Types -->
+    <div class="row mb-5">
+        <div class="col-12">
+            <h2 class="h3 mb-4">
+                <i class="fas fa-flask me-2 text-primary"></i>
+                Analysis Workflows
+            </h2>
+        </div>
+
+        <!-- Basic Analysis -->
+        <div class="col-md-4 mb-3">
+            <div class="card h-100 border-primary">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-chart-line me-2"></i>
+                        Basic Analysis
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        Explore fundamental patterns in meta-interactions:
+                    </p>
+                    <ul class="small">
+                        <li><strong>MI Correlation:</strong> Relationships among inferred meta-interactions</li>
+                        <li><strong>LR Loading:</strong> Ligand-receptor pathway enrichment for each MI</li>
+                        <li><strong>Cell-Type Pairs:</strong> MI enrichment across sender-receiver pairs</li>
+                        <li><strong>MI Patterns:</strong> Overall MI intensity and distribution</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- Subtype Analysis -->
+        <div class="col-md-4 mb-3">
+            <div class="card h-100 border-primary">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-microscope me-2"></i>
+                        Subtype Analysis
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        Discover cell subtypes guided by meta-interactions:
+                    </p>
+                    <ul class="small">
+                        <li><strong>Cell Subtypes:</strong> MI-guided malignant cell subtype identification</li>
+                        <li><strong>Neighborhood:</strong> Analysis of neighboring cell type proportions</li>
+                        <li><strong>Functional States:</strong> Association with biological processes (angiogenesis, hypoxia, etc.)</li>
+                        <li><strong>CAF Markers:</strong> Cancer-associated fibroblast program analysis</li>
+                        <li><strong>Clinical Data:</strong> Correlation with stage, site, and outcomes</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <!-- MI Cascade Analysis -->
+        <div class="col-md-4 mb-3">
+            <div class="card h-100 border-primary">
+                <div class="card-header text-white" style="background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-sitemap me-2"></i>
+                        MI Cascade Analysis
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <p class="card-text">
+                        Detect higher-order multi-hop cell communication:
+                    </p>
+                    <ul class="small">
+                        <li><strong>MI Colocalization:</strong> Identify significant upstream-downstream MI pairs</li>
+                        <li><strong>Cell-Type Triplets:</strong> Characterize cell1 → cell2 → cell3 cascades</li>
+                        <li><strong>Spatial Visualization:</strong> In-situ MI cascade patterns in tissue</li>
+                        <li><strong>LR Pathways:</strong> Ligand-receptor activity in cascades</li>
+                        <li><strong>Gene Programs:</strong> Downstream transcriptional responses and GO enrichment</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Getting Started Section -->
+    <div class="row mb-5">
+        <div class="col-12">
+            <hr class="my-4">
+            <h2 class="h3 mb-3">
+                <i class="fas fa-rocket me-2 text-primary"></i>
+                Getting Started
+            </h2>
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">
+                        <i class="fas fa-play-circle me-2"></i>
+                        Running SpiderNet Analysis
+                    </h5>
+                    <p>
+                        To generate analysis results for visualization, run SpiderNet on your spatial transcriptomics data.
+                        The framework will learn meta-interaction representations and produce comprehensive analysis outputs.
+                    </p>
+
+                    <h6 class="mt-3 mb-2">
+                        <i class="fas fa-terminal me-2"></i>
+                        Example Command:
+                    </h6>
+                    <pre class="bg-light p-3 rounded"><code>cd SpiderNet
+conda activate spidernet
+python run_spidernet.py --data your_dataset.h5ad --output Results/</code></pre>
+
+                    <h6 class="mt-3 mb-2">
+                        <i class="fas fa-folder-open me-2"></i>
+                        Results Location:
+                    </h6>
+                    <p>
+                        SpiderNet will create results following the pattern <code>SpiderNet_Result_dim*</code>.
+                        The viewer automatically scans for results in:
+                    </p>
+                    <ul>
+                        <li><code>./Interactivetool/</code></li>
+                        <li><code>./SpiderNet/Results/</code></li>
+                    </ul>
+
+                    <h6 class="mt-3 mb-2">
+                        <i class="fas fa-sync-alt me-2"></i>
+                        Automatic Discovery:
+                    </h6>
+                    <p class="mb-0">
+                        This viewer automatically scans the above directories and discovers all SpiderNet result folders.
+                        Once your analysis completes, simply refresh this page to see your new dataset appear below.
+                        All generated plots (PNG files) will be automatically categorized into Basic Analysis, Subtype Analysis,
+                        and MI Cascade Analysis sections for easy exploration.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Available Datasets Section -->
+    {% if datasets %}
+    <div class="row mb-4">
+        <div class="col-12">
+            <hr class="my-4">
+            <h2 class="h3 mb-3">
+                <i class="fas fa-database me-2 text-primary"></i>
+                Available Datasets ({{ datasets|length }})
+            </h2>
+            <p class="text-muted">Select a dataset to explore analysis results</p>
+        </div>
+    </div>
+
+    <div class="row">
+        {% for name, info in datasets.items() %}
+        <div class="col-md-6 col-lg-4 mb-4">
+            <div class="card h-100 shadow-sm dataset-card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-folder-open me-2"></i>
+                        {{ name }}
+                    </h5>
+                </div>
+                <div class="card-body">
+                    <!-- Quick Access Buttons -->
+                    <div class="row g-2 mb-3">
+                        <div class="col-12">
+                            <a href="{{ url_for('basic_analysis', dataset_name=name) }}"
+                               class="btn btn-primary w-100">
+                                <i class="fas fa-chart-bar me-2"></i> Basic Analysis
+                            </a>
+                        </div>
+                        <div class="col-12">
+                            <a href="{{ url_for('subtype_analysis', dataset_name=name) }}"
+                               class="btn btn-primary w-100">
+                                <i class="fas fa-dna me-2"></i> Subtype Analysis
+                            </a>
+                        </div>
+                        <div class="col-12">
+                            <a href="{{ url_for('cascade_analysis', dataset_name=name) }}"
+                               class="btn btn-primary w-100">
+                                <i class="fas fa-project-diagram me-2"></i> MI Cascade Analysis
+                            </a>
+                        </div>
+                    </div>
+
+                    <hr>
+
+                    <dl class="row mb-0">
+                        <dt class="col-sm-4 text-muted">Plots:</dt>
+                        <dd class="col-sm-8">
+                            <span class="badge bg-success">{{ info.plot_count }} PNG files</span>
+                        </dd>
+
+                        <dt class="col-sm-4 text-muted">Notebooks:</dt>
+                        <dd class="col-sm-8">{{ info.notebooks|length }} analysis notebooks</dd>
+
+                        <dt class="col-sm-4 text-muted">Location:</dt>
+                        <dd class="col-sm-8">
+                            <small class="font-monospace text-muted">{{ info.path.name }}</small>
+                        </dd>
+                    </dl>
+
+                    {% if info.notebooks %}
+                    <div class="mt-2">
+                        <small class="text-muted">Analyses:</small>
+                        <ul class="small mb-0">
+                            {% for notebook in info.notebooks[:3] %}
+                            <li>{{ notebook.replace('.ipynb', '').replace('_', ' ') }}</li>
+                            {% endfor %}
+                        </ul>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer bg-light">
+                    <div class="btn-group w-100" role="group">
+                        <a href="{{ url_for('basic_analysis', dataset_name=name) }}"
+                           class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-chart-bar me-1"></i> Basic
+                        </a>
+                        <a href="{{ url_for('subtype_analysis', dataset_name=name) }}"
+                           class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-dna me-1"></i> Subtype
+                        </a>
+                        <a href="{{ url_for('cascade_analysis', dataset_name=name) }}"
+                           class="btn btn-outline-primary btn-sm">
+                            <i class="fas fa-project-diagram me-1"></i> Cascade
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-warning" role="alert">
+                <h4 class="alert-heading">
+                    <i class="fas fa-exclamation-triangle me-2"></i>
+                    No Datasets Found
+                </h4>
+                <p>No SpiderNet result directories were found in the search paths.</p>
+                <hr>
+                <p class="mb-0">
+                    <strong>Search locations:</strong>
+                    <ul class="mb-0">
+                        <li><code>./Interactivetool</code></li>
+                        <li><code>./SpiderNet/Results</code></li>
+                    </ul>
+                </p>
+                <p class="mt-2 mb-0">
+                    Ensure your results are in a directory matching the pattern:
+                    <code>SpiderNet_Result_dim*</code>
+                </p>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

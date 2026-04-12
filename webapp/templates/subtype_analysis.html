@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}{{ dataset_name }} - Subtype Analysis{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h2">
+                <i class="fas fa-microscope text-primary me-2"></i>
+                Subtype Analysis
+                <small class="text-muted">- {{ dataset_name }}</small>
+            </h1>
+            <p class="lead text-muted">
+                Malignant cell subtypes, functional states, and clinical metadata
+            </p>
+        </div>
+    </div>
+
+    <!-- Plot Count Badge -->
+    <div class="row mb-3">
+        <div class="col-12">
+            {% set total_plots = sections.values()|map('length')|sum %}
+            <span class="badge bg-info">{{ total_plots }} plots in {{ sections|length }} sections</span>
+        </div>
+    </div>
+
+    <!-- Sections -->
+    {% if sections %}
+        {% for section_name, plots in sections.items() %}
+        <div class="section-container mb-5">
+            <h3 class="section-title">
+                {% if section_name == "Cluster Overview" %}
+                    <i class="fas fa-th me-2"></i>
+                {% elif section_name == "MI-UMAP Visualization" %}
+                    <i class="fas fa-project-diagram me-2"></i>
+                {% elif section_name == "Banksy-UMAP Visualization" %}
+                    <i class="fas fa-map-marked-alt me-2"></i>
+                {% elif section_name == "Gene Expression UMAP" %}
+                    <i class="fas fa-dna me-2"></i>
+                {% elif section_name == "Neighboring Cell Proportions" %}
+                    <i class="fas fa-users me-2"></i>
+                {% elif section_name == "Functional States" %}
+                    <i class="fas fa-heartbeat me-2"></i>
+                {% elif section_name == "CAF Marker Analysis" %}
+                    <i class="fas fa-flag me-2"></i>
+                {% elif section_name == "Clinical Metadata" %}
+                    <i class="fas fa-hospital me-2"></i>
+                {% elif section_name == "In-Silico Perturbation" %}
+                    <i class="fas fa-flask me-2"></i>
+                {% else %}
+                    <i class="fas fa-layer-group me-2"></i>
+                {% endif %}
+                {{ section_name }}
+                <span class="badge bg-secondary ms-2">{{ plots|length }}</span>
+            </h3>
+
+            <!-- Section Description -->
+            {% if section_name == "Cluster Overview" %}
+                <p class="text-muted mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Overall clustering patterns and malignant cell subtype assignments
+                </p>
+            {% elif section_name == "MI-UMAP Visualization" %}
+                <p class="text-muted mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    UMAP embeddings based on meta-interaction (MI) profiles showing cell subtypes, specific subtypes (C5), and clinical covariates
+                </p>
+            {% elif section_name == "Banksy-UMAP Visualization" %}
+                <p class="text-muted mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    UMAP embeddings based on Banksy spatial features showing neighborhood context
+                </p>
+            {% elif section_name == "Gene Expression UMAP" %}
+                <p class="text-muted mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    UMAP embeddings based on gene expression (X) showing transcriptional variation
+                </p>
+            {% elif section_name == "Neighboring Cell Proportions" %}
+                <p class="text-muted mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Visualization of neighboring cell type proportions across different UMAP embeddings (MI, Banksy, Gene Expression)
+                </p>
+            {% elif section_name == "Functional States" %}
+                <p class="text-muted mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Tumor functional state scores including angiogenesis, hypoxia, inflammation, and metastasis signatures
+                </p>
+            {% elif section_name == "CAF Marker Analysis" %}
+                <p class="text-muted mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Cancer-associated fibroblast (CAF) marker expression and signaling analysis
+                </p>
+            {% elif section_name == "Clinical Metadata" %}
+                <p class="text-muted mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Clinical covariates including stage, site, outcome, patient, and treatment information
+                </p>
+            {% elif section_name == "In-Silico Perturbation" %}
+                <p class="text-muted mb-3">
+                    <i class="fas fa-info-circle me-1"></i>
+                    Computational perturbation analysis showing predicted effects of MI modulation
+                </p>
+            {% endif %}
+
+            <div class="row g-3">
+                {% for plot in plots %}
+                <div class="col-md-6 col-lg-4 col-xl-3">
+                    <div class="plot-card">
+                        <div class="plot-image-container">
+                            <img src="{{ generate_plot_url(dataset_name, plot.path) }}"
+                                 alt="{{ plot.title }}"
+                                 class="plot-image"
+                                 data-title="{{ plot.title }}"
+                                 data-pdf-available="{{ plot.pdf_available }}"
+                                 data-pdf-path="{{ plot.path.replace('.png', '.pdf') }}">
+                            <div class="plot-overlay">
+                                <button class="btn btn-sm btn-light">
+                                    <i class="fas fa-search-plus"></i> Enlarge
+                                </button>
+                            </div>
+                        </div>
+                        <div class="plot-title">{{ plot.title }}</div>
+                        {% if plot.pdf_available %}
+                        <div class="plot-actions">
+                            <a href="{{ generate_plot_url(dataset_name, plot.path.replace('.png', '.pdf')) }}"
+                               class="btn btn-sm btn-outline-primary"
+                               target="_blank">
+                                <i class="fas fa-file-pdf me-1"></i> PDF
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                No subtype analysis plots found for this dataset.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

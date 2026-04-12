@@ -52,3 +52,33 @@ A few examples in Jupyter notebook are included in the examples folder:
    - [Part1: In-silico perturbation analysis](https://github.com/junjie-sml/SpiderNet/blob/main/Examples/PerturbFISH_Part1_insilicospatialperturbation.ipynb)
 
 Data used in these examples are available in [Google drive](https://drive.google.com/drive/folders/15tC6j2cQdNUNZHs1Zjmw-XnDx0Y7PapE?usp=sharing). Trained models are also uploaded.
+
+## Interactive Web Viewer
+
+SpiderNet includes an interactive web-based results viewer for exploring analysis outputs. The viewer provides an intuitive interface to navigate through plots from Basic Analysis, Subtype Analysis, and MI Cascade Analysis.
+
+### Quick Start
+```bash
+cd SpiderNet
+bash webapp/run.sh
+```
+
+Then open your browser to **http://localhost:8000**
+
+### Features
+- **Multi-Dataset Support**: Automatically discovers all SpiderNet result directories
+- **Three Analysis Views**:
+  - **Basic Analysis**: MI correlation, LR loading, cell-type pair enrichment, MI patterns
+  - **Subtype Analysis**: Malignant subtypes, neighborhood analysis, functional states, CAF markers, clinical data
+  - **MI Cascade Analysis**: MI colocalization, cell-type triplets, spatial visualization, LR pathways, gene programs
+- **Interactive**: Click to enlarge plots, download PDFs
+- **Responsive**: Works on desktop, tablet, and mobile
+
+### Results Location
+Place your SpiderNet analysis results (directories matching `SpiderNet_Result_dim*`) in either:
+- `./Interactivetool/`
+- `./SpiderNet/Results/`
+
+The viewer will automatically discover and categorize all PNG plots from your analysis notebooks.
+
+For more details, see [webapp/README.md](webapp/README.md).

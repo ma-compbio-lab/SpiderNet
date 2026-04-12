@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}{{ dataset_name }} - Basic Analysis{% endblock %}
+
+{% block content %}
+<div class="container-fluid">
+    <!-- Page Header -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <h1 class="h2">
+                <i class="fas fa-chart-line text-primary me-2"></i>
+                Basic Analysis
+                <small class="text-muted">- {{ dataset_name }}</small>
+            </h1>
+            <p class="lead text-muted">
+                MI correlation analysis, LR loading pathway enrichment, and cell-type pair interactions
+            </p>
+        </div>
+    </div>
+
+    <!-- Plot Count Badge -->
+    <div class="row mb-3">
+        <div class="col-12">
+            {% set total_plots = sections.values()|map('length')|sum %}
+            <span class="badge bg-info">{{ total_plots }} plots in {{ sections|length }} sections</span>
+        </div>
+    </div>
+
+    <!-- Sections -->
+    {% if sections %}
+        {% for section_name, plots in sections.items() %}
+        <div class="section-container mb-5">
+            <h3 class="section-title">
+                <i class="fas fa-layer-group me-2"></i>
+                {{ section_name }}
+                <span class="badge bg-secondary ms-2">{{ plots|length }}</span>
+            </h3>
+
+            <div class="row g-3">
+                {% for plot in plots %}
+                <div class="col-md-6 col-lg-4 col-xl-3">
+                    <div class="plot-card">
+                        <div class="plot-image-container">
+                            <img src="{{ generate_plot_url(dataset_name, plot.path) }}"
+                                 alt="{{ plot.title }}"
+                                 class="plot-image"
+                                 data-title="{{ plot.title }}"
+                                 data-pdf-available="{{ plot.pdf_available }}"
+                                 data-pdf-path="{{ plot.path.replace('.png', '.pdf') }}">
+                            <div class="plot-overlay">
+                                <button class="btn btn-sm btn-light">
+                                    <i class="fas fa-search-plus"></i> Enlarge
+                                </button>
+                            </div>
+                        </div>
+                        <div class="plot-title">{{ plot.title }}</div>
+                        {% if plot.pdf_available %}
+                        <div class="plot-actions">
+                            <a href="{{ generate_plot_url(dataset_name, plot.path.replace('.png', '.pdf')) }}"
+                               class="btn btn-sm btn-outline-primary"
+                               target="_blank">
+                                <i class="fas fa-file-pdf me-1"></i> PDF
+                            </a>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="row">
+        <div class="col-12">
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                No basic analysis plots found for this dataset.
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
