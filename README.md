@@ -53,26 +53,28 @@ A few examples in Jupyter notebook are included in the examples folder:
 
 Data used in these examples are available in [Google drive](https://drive.google.com/drive/folders/15tC6j2cQdNUNZHs1Zjmw-XnDx0Y7PapE?usp=sharing). Trained models are also uploaded.
 
-## Interactive Web Viewer
+## SpiderNet-Interactive: Web-Based Results Viewer
 
-SpiderNet includes an interactive web-based results viewer for exploring analysis outputs. The viewer provides an intuitive interface to navigate through plots from Basic Analysis, Subtype Analysis, and MI Cascade Analysis.
+SpiderNet includes **SpiderNet-Interactive**, a local web-based visualization tool for exploring analysis outputs. The viewer provides an intuitive interface to navigate through plots from Basic Analysis, Subtype Analysis, and MI Cascade Analysis.
 
 ### Quick Start
 ```bash
-cd SpiderNet
-bash webapp/run.sh
+cd SpiderNet/SpiderNet-interactive
+bash run.sh
 ```
 
 Then open your browser to **http://localhost:8000**
 
 ### Features
 - **Multi-Dataset Support**: Automatically discovers all SpiderNet result directories
-- **Three Analysis Views**:
-  - **Basic Analysis**: MI correlation, LR loading, cell-type pair enrichment, MI patterns
-  - **Subtype Analysis**: Malignant subtypes, neighborhood analysis, functional states, CAF markers, clinical data
-  - **MI Cascade Analysis**: MI colocalization, cell-type triplets, spatial visualization, LR pathways, gene programs
-- **Interactive**: Click to enlarge plots, download PDFs
-- **Responsive**: Works on desktop, tablet, and mobile
+- **Three Analysis Modules**:
+  - **Basic Analysis**: MI correlation, LR loading pathway enrichment, cell-type pair associations
+  - **Subtype Analysis**: MI-guided clustering, functional states, clinical metadata integration
+  - **MI Cascade Analysis**: Multi-hop communication, spatial visualization, gene program analysis
+- **Advanced Search & Filtering**: Real-time search, category filtering, and sorting
+- **Interactive Exploration**: Click-to-enlarge modals, keyboard shortcuts, quick actions
+- **Local Server**: Runs on your machine, no internet required, accessible via browser
+- **Cross-Platform**: Works on macOS, Linux, and Windows
 
 ### Results Location
 Place your SpiderNet analysis results (directories matching `SpiderNet_Result_dim*`) in either:
@@ -81,4 +83,4 @@ Place your SpiderNet analysis results (directories matching `SpiderNet_Result_di
 
 The viewer will automatically discover and categorize all PNG plots from your analysis notebooks.
 
-For more details, see [webapp/README.md](webapp/README.md).
+For more details, see [SpiderNet-interactive/README.md](SpiderNet-interactive/README.md).

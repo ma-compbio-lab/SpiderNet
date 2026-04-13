@@ -5,7 +5,7 @@ A local web-based visualization tool for exploring SpiderNet spatial omics analy
 ## Quick Start
 
 ```bash
-cd /Users/wenduoc/SpiderNet/webapp
+cd SpiderNet/SpiderNet-interactive
 bash run.sh
 ```
 
@@ -51,7 +51,7 @@ Press `Ctrl+C` in the terminal
 ## Structure
 
 ```
-webapp/
+SpiderNet-interactive/
 ├── app.py              # Flask application
 ├── config.py           # Configuration
 ├── utils.py            # Plot discovery logic
