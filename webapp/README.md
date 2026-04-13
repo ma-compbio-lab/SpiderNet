@@ -1,6 +1,6 @@
-# SpiderNet Results Viewer
+# SpiderNet-Interactive
 
-Web-based interactive viewer for SpiderNet spatial omics analysis results.
+A local web-based visualization tool for exploring SpiderNet spatial omics analysis results.
 
 ## Quick Start
 
@@ -14,12 +14,14 @@ Then open your browser to: **http://localhost:8000**
 ## Features
 
 - **Multi-Dataset Support**: Automatically discovers all SpiderNet result directories
-- **Three Analysis Views**:
-  - Basic Analysis (MI correlation, LR loading, cell-type pairs)
-  - Subtype Analysis (malignant subtypes, functional states, clinical data)
-  - MI Cascade Analysis (spatial cascades, gene programs, GO enrichment)
-- **Interactive**: Click to enlarge plots, download PDFs
-- **Responsive**: Works on desktop, tablet, and mobile
+- **Three Analysis Modules**:
+  - Basic Analysis (MI correlation, LR loading pathway enrichment, cell-type pair associations)
+  - Subtype Analysis (MI-guided clustering, functional states, clinical metadata integration)
+  - MI Cascade Analysis (multi-hop communication, spatial visualization, gene program analysis)
+- **Advanced Search & Filtering**: Real-time search, category filtering, and sorting
+- **Interactive Exploration**: Click-to-enlarge modals, keyboard shortcuts, quick actions
+- **Local Server**: Runs on your machine, no internet required, accessible via browser
+- **Cross-Platform**: Works on macOS, Linux, and Windows
 
 ## Requirements
 
@@ -98,6 +100,10 @@ To modify the application:
 3. **Customize styling**: Edit `static/css/style.css`
 4. **Add features**: Edit `static/js/main.js`
 
-## Credits
+## About
 
-Built for SpiderNet: An interpretable deep learning framework for spatial omics data.
+SpiderNet-Interactive is part of the SpiderNet framework, an interpretable deep learning approach for learning cell-cell meta-interactions from spatial transcriptomics data. This visualization tool enables researchers to efficiently explore and interpret learned communication patterns across tissue contexts.
+
+**Repository**: https://github.com/ma-compbio-lab/SpiderNet
+**Documentation**: See main SpiderNet README for analysis pipeline details
+**License**: MIT License

@@ -22,7 +22,7 @@
         <div class="container-fluid">
             <a class="navbar-brand" href="{{ url_for('index') }}">
                 <i class="fas fa-project-diagram me-2"></i>
-                SpiderNet
+                SpiderNet-Interactive
             </a>
 
             <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
@@ -54,25 +54,23 @@
                 </ul>
 
                 <ul class="navbar-nav ms-auto">
-                    {% if not dataset_name %}
-                    <!-- Home page navigation -->
+                    <!-- Analyses navigation - works from any page -->
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle" href="#analyses-section" role="button" data-bs-toggle="dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-flask me-1"></i> Analyses
                         </a>
                         <ul class="dropdown-menu">
-                            <li><a class="dropdown-item" href="#analyses-section" onclick="scrollToSection('basic-card')">
+                            <li><a class="dropdown-item" href="{{ url_for('index') }}#basic-card">
                                 <i class="fas fa-chart-line me-2"></i> Basic Analysis
                             </a></li>
-                            <li><a class="dropdown-item" href="#analyses-section" onclick="scrollToSection('subtype-card')">
+                            <li><a class="dropdown-item" href="{{ url_for('index') }}#subtype-card">
                                 <i class="fas fa-microscope me-2"></i> Subtype Analysis
                             </a></li>
-                            <li><a class="dropdown-item" href="#analyses-section" onclick="scrollToSection('cascade-card')">
+                            <li><a class="dropdown-item" href="{{ url_for('index') }}#cascade-card">
                                 <i class="fas fa-sitemap me-2"></i> MI Cascade
                             </a></li>
                         </ul>
                     </li>
-                    {% endif %}
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
                             <i class="fas fa-database me-1"></i> Datasets
