@@ -3,8 +3,9 @@ Configuration settings for SpiderNet Results Viewer
 """
 from pathlib import Path
 
-# Root directory for SpiderNet project
-SPIDERNET_ROOT = Path("/Users/wenduoc/SpiderNet")
+# Root directory for SpiderNet project (parent of SpiderNet-interactive/)
+# This assumes the app is in SpiderNet/SpiderNet-interactive/
+SPIDERNET_ROOT = Path(__file__).parent.parent.resolve()
 
 # Directories to search for results
 SEARCH_DIRS = [

@@ -70,18 +70,37 @@ SpiderNet-interactive/
 
 ## Adding New Datasets
 
+The app searches for datasets relative to the **parent directory** of `SpiderNet-interactive/`.
+
+**Directory Structure:**
+```
+YourProjectDirectory/          # Could be named anything (e.g., SpiderNet, MyProject, etc.)
+├── SpiderNet-interactive/     # The web app (this directory)
+├── Interactivetool/           # Search location 1
+│   └── DatasetName/
+│       └── SpiderNet_Result_dim*/
+│           └── *.png files
+└── SpiderNet/                 # Search location 2
+    └── Results/
+        └── SpiderNet_Result_dim*/
+            └── *.png files
+```
+
+**To add a new dataset:**
 1. Place your SpiderNet results in either:
-   - `./Interactivetool/`
-   - `./SpiderNet/Results/`
-2. Ensure the results are in a folder named `SpiderNet_Result_dim*`
+   - `../Interactivetool/` (relative to SpiderNet-interactive/)
+   - `../SpiderNet/Results/` (relative to SpiderNet-interactive/)
+2. Ensure the results are in a folder named `SpiderNet_Result_dim*` (e.g., `SpiderNet_Result_dim15`)
 3. Restart the application
 4. Your new dataset will appear on the home page
 
 ## Troubleshooting
 
 **No datasets found:**
-- Check that results are in `SpiderNet_Result_dim*` folders
-- Verify search paths in `config.py`
+- Verify the directory structure matches the pattern above
+- Check that results are in folders named `SpiderNet_Result_dim*`
+- Ensure PNG files exist in the results directory
+- The app looks in the **parent directory** of `SpiderNet-interactive/`, not inside it
 
 **Images not loading:**
 - Check file permissions
