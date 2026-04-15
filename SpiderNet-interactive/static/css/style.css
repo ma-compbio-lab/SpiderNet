@@ -875,3 +875,20 @@ img.rounded-circle:hover {
     font-weight: 500;
     padding: 0.35rem 0.65rem;
 }
+
+/* Method Figure - High Quality Rendering */
+.method-figure {
+    image-rendering: -webkit-optimize-contrast;
+    image-rendering: crisp-edges;
+    -ms-interpolation-mode: nearest-neighbor;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+    transform: translateZ(0);
+    -webkit-transform: translateZ(0);
+    transition: transform var(--transition-base);
+}
+
+.method-figure:hover {
+    transform: scale(1.02);
+    box-shadow: var(--shadow-lg);
+}
