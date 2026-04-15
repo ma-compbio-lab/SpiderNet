@@ -88,8 +88,9 @@ def categorize_plots(results_dir):
         plot = {
             "filename": filename,
             "title": format_plot_title(filename),
-            "description": get_plot_description(filename),
+            "description": get_plot_description(filename, relative_path),
             "path": str(relative_path),
+            "relative_path": relative_path,  # Add for easier access in description generation
             "full_path": str(png_file),
             "pdf_available": png_file.with_suffix('.pdf').exists(),
         }
@@ -115,15 +116,40 @@ def is_basic_analysis_plot(filename, relative_path):
     filename_lower = filename.lower()
     path_str = str(relative_path).lower()
 
+    # First check if it matches basic patterns
     basic_patterns = [
-        "correlation",
+        "lr_pairs_correlation",
+        "mi_correlation",
         "lr_loading",
-        "avg_mi",
-        "mean_mi",
-        "mi_intensity",
+        "avg_mi_cellclass_pair",
+        "celltype_pair_example",
+        "in_situ_meta_interaction",  # Quiver plots from Optional A4
     ]
 
-    return any(pattern in filename_lower or pattern in path_str for pattern in basic_patterns)
+    # If it doesn't match any basic pattern, it's not basic
+    if not any(pattern in filename_lower or pattern in path_str for pattern in basic_patterns):
+        return False
+
+    # Exclude patterns that indicate subtype/cascade analysis
+    # (even if they matched a basic pattern)
+    exclude_patterns = [
+        "_malignant",  # More specific: only exclude if "malignant" is a separate word
+        "umap_",
+        "per_cluster",  # Cell clusters, not hierarchical clustering
+        "functional",
+        "hypoxia",
+        "inflammation",
+        "angiogenesis",
+        "metastasis",
+        "caf_vs",
+        "boxplot",
+        "insilicoperturbation",
+    ]
+
+    if any(pattern in filename_lower for pattern in exclude_patterns):
+        return False
+
+    return True
 
 
 def is_cascade_analysis_plot(filename, relative_path):
@@ -148,17 +174,19 @@ def is_cascade_analysis_plot(filename, relative_path):
     return any(pattern in filename_lower or pattern in path_str for pattern in cascade_patterns)
 
 
-def get_plot_description(filename):
+def get_plot_description(filename, relative_path=None):
     """
-    Get detailed description for a plot based on its filename.
+    Get detailed description for a plot based on its filename and path.
 
     Args:
         filename: str, plot filename
+        relative_path: Path or str, relative path to the plot (optional)
 
     Returns:
         str: Description of what the plot shows
     """
     name_lower = filename.lower()
+    path_str = str(relative_path).lower() if relative_path else ""
 
     # Basic Analysis Descriptions
     if "lr_pairs_correlation" in name_lower or "lr pairs correlation" in name_lower:
@@ -172,6 +200,15 @@ def get_plot_description(filename):
 
     if "avg_mi_cellclass_pair" in name_lower:
         return "Average meta-interaction strengths across different sender-receiver cell type pairs. Shows which cell-cell communications are mediated by each MI."
+
+    if "celltype_pair_example" in name_lower:
+        return "Example in-situ spatial visualization showing MI activity for a specific cell-type pair. Demonstrates how MIs are spatially distributed in tissue microenvironment."
+
+    # In-situ quiver plots from Optional A4
+    if "in_situ_meta_interaction" in path_str:
+        # Parse filename to extract MI name and cell type filters
+        # Format: {sample_name}_{MI-X}_{sender}_to_{receiver}.png
+        return "Spatial quiver plot showing directional MI activity between sender and receiver cells. Arrows indicate communication direction, colored by MI strength score. Enables visualization of cell-cell signaling patterns in tissue spatial context."
 
     if "avg_mi_heatmap" in name_lower:
         return "Heatmap showing average MI activity patterns across cell types and spatial contexts."
@@ -384,22 +421,24 @@ def organize_plots_by_section(plots, category):
             "LR Pairs Correlation": [],
             "MI Correlation": [],
             "LR Loading Pathway Enrichment": [],
-            "Cell-Type Pair Enrichment": [],
-            "Overall MI Patterns": [],
+            "Sender-cell-type--receiver-cell-type Interaction Analysis": [],
+            "In-Situ MI Spatial Visualization": [],
         }
 
         for plot in plots:
             name = plot["filename"].lower()
+            path_str = str(plot.get("relative_path", "")).lower()
+
             if "lr_pairs_correlation" in name or "lr pairs correlation" in name:
                 sections["LR Pairs Correlation"].append(plot)
             elif "mi_correlation" in name or "correlation" in name:
                 sections["MI Correlation"].append(plot)
-            elif "lr" in name or "loading" in name:
+            elif "lr_loading" in name or "lr loading" in name or "loading_pathway" in name:
                 sections["LR Loading Pathway Enrichment"].append(plot)
-            elif "cellclass" in name or "pair" in name:
-                sections["Cell-Type Pair Enrichment"].append(plot)
-            else:
-                sections["Overall MI Patterns"].append(plot)
+            elif ("cellclass" in name and "pair" in name) or "celltype_pair_example" in name:
+                sections["Sender-cell-type--receiver-cell-type Interaction Analysis"].append(plot)
+            elif "in_situ_meta_interaction" in path_str:
+                sections["In-Situ MI Spatial Visualization"].append(plot)
 
     elif category == "subtype":
         sections = {
