@@ -161,8 +161,11 @@ def get_plot_description(filename):
     name_lower = filename.lower()
 
     # Basic Analysis Descriptions
+    if "lr_pairs_correlation" in name_lower or "lr pairs correlation" in name_lower:
+        return "Correlation heatmap showing relationships between ligand-receptor (LR) pairs based on their co-expression patterns. Hierarchical clustering groups LR pairs with similar expression correlations across cells."
+
     if "correlation" in name_lower and "mi" in name_lower:
-        return "Correlation matrix showing relationships between different meta-interactions (MIs). Positive correlations indicate MIs that tend to co-occur."
+        return "Correlation matrix showing relationships between different meta-interactions (MIs). Positive correlations indicate MIs that tend to co-occur across the tissue."
 
     if "lr_loading" in name_lower or "loading" in name_lower:
         return "Ligand-receptor (LR) pathway loading scores showing which LR pathways are enriched in each meta-interaction."
@@ -378,7 +381,8 @@ def organize_plots_by_section(plots, category):
 
     if category == "basic":
         sections = {
-            "MI Correlation Analysis": [],
+            "LR Pairs Correlation": [],
+            "MI Correlation": [],
             "LR Loading Pathway Enrichment": [],
             "Cell-Type Pair Enrichment": [],
             "Overall MI Patterns": [],
@@ -386,8 +390,10 @@ def organize_plots_by_section(plots, category):
 
         for plot in plots:
             name = plot["filename"].lower()
-            if "correlation" in name:
-                sections["MI Correlation Analysis"].append(plot)
+            if "lr_pairs_correlation" in name or "lr pairs correlation" in name:
+                sections["LR Pairs Correlation"].append(plot)
+            elif "mi_correlation" in name or "correlation" in name:
+                sections["MI Correlation"].append(plot)
             elif "lr" in name or "loading" in name:
                 sections["LR Loading Pathway Enrichment"].append(plot)
             elif "cellclass" in name or "pair" in name:
