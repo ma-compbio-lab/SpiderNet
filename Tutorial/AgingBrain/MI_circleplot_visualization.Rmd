@@ -1,0 +1,500 @@
+---
+title: "MI link visualization"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+# Overview
+
+This notebook visualizes inferred MI links between cells using a circular layout. It is organized so that the dataset-specific settings are concentrated at the beginning, making it easier to adapt the workflow to another dataset.
+
+The workflow includes:
+
+1. define dataset paths and plotting options;
+2. load cell metadata and inferred MI edges;
+3. optionally subset the data;
+4. compute weighted cell degree from the inferred graph;
+5. prepare circular layout coordinates;
+6. draw cell-type sectors, degree bars, and MI links;
+7. export the figure to PDF.
+
+# 1. User settings
+
+Edit this section first when applying the notebook to a new dataset.
+
+```{r user-settings}
+# Main input/output directory
+file_savepath_main <- "D:/SpiderNet/Results/AgingBrain/V1/SpiderNet_Result_dim30/"
+
+# Input files (expected under file_savepath_main by default)
+cell_meta_file <- file.path(file_savepath_main, "cell_meta_all.csv")
+edge_file      <- file.path(file_savepath_main, "MI_edge_index_all_choose.csv")
+
+# Output figure
+output_pdf <- file.path(file_savepath_main, "MI_links.pdf")
+
+# Display options
+if_showdifftype    <- FALSE   # keep only cross-celltype edges
+if_showTcell       <- TRUE    # keep only edges involving T cell
+focus_celltype     <- "T cell"
+if_sample          <- FALSE   # optionally downsample cells for quick preview
+sample_fraction    <- 0.1
+if_transform_degree <- TRUE   # cap degree for visualization
+degree_cap          <- 10
+
+# Celltype order on the circle
+celltypes <- c(
+  "Neuron-Excitatory", "Neuron-Inhibitory", "Neuron-MSN", "Astrocyte",
+  "Microglia", "Oligodendrocyte", "OPC", "Endothelial", "Pericyte",
+  "VSMC", "VLMC", "Ependymal", "Neuroblast", "NSC", "Macrophage",
+  "T cell", "Neutrophil", "B cell"
+)
+
+# Celltype colors
+color_set <- c(
+  "#258B42", "#9FCF89", "#98CB3B", "#4F6AB5", "#6BCCD7", "#8ACEEC",
+  "#3FB7E7", "#EB2024", "#7F2321", "#F67F70", "#D25C5A", "#909190",
+  "#F7A45C", "#F48B20", "#7D287C", "#F321F8", "#9750B4", "#C176AE"
+)
+```
+
+# 2. Load packages
+
+```{r packages}
+library(circlize)
+library(dplyr)
+library(tidyr)
+library(readr)
+```
+
+# 3. Helper functions
+
+These small functions make the workflow easier to reuse on another dataset.
+
+```{r helper-functions}
+shorten_ct <- function(ct) {
+  mapping <- c(
+    "Neuron-Excitatory" = "Neu-Exc.",
+    "Neuron-Inhibitory" = "Neu-Inh.",
+    "Neuron-MSN"        = "Neu-MSN.",
+    "Oligodendrocyte"   = "Oligo.",
+    "Neutrophil"        = "Neut.",
+    "Macrophage"        = "Macro.",
+    "Ependymal"         = "Epend.",
+    "Endothelial"       = "Endo.",
+    "Neuroblast"        = "Nblast.",
+    "Astrocyte"         = "Astro.",
+    "Microglia"         = "Micro.",
+    "Pericyte"          = "Peri."
+  )
+  ifelse(ct %in% names(mapping), mapping[ct], ct)
+}
+
+read_mi_data <- function(cell_meta_file, edge_file) {
+  cell_meta <- read_csv(cell_meta_file, show_col_types = FALSE) %>% as.data.frame()
+  edge_df   <- read_csv(edge_file, show_col_types = FALSE) %>% as.data.frame()
+
+  stopifnot("cellname" %in% colnames(cell_meta))
+  stopifnot(all(c("source", "target") %in% colnames(edge_df)))
+
+  rownames(cell_meta) <- cell_meta$cellname
+  list(cell_meta = cell_meta, edge_df = edge_df)
+}
+
+filter_edges_and_cells <- function(cell_meta, edge_df,
+                                   if_showdifftype = FALSE,
+                                   if_showTcell = FALSE,
+                                   focus_celltype = "T cell",
+                                   if_sample = FALSE,
+                                   sample_fraction = 0.1) {
+  cell_meta_ori <- cell_meta
+
+  # Restrict to cells that are present in the edge list
+  keep_cells <- unique(c(edge_df$source, edge_df$target))
+  cell_meta  <- cell_meta[keep_cells, , drop = FALSE]
+
+  if (if_showTcell) {
+    edge_df <- edge_df[
+      (cell_meta_ori[edge_df$source, "celltype"] == focus_celltype) |
+      (cell_meta_ori[edge_df$target, "celltype"] == focus_celltype),
+      , drop = FALSE
+    ]
+    keep_cells <- unique(c(edge_df$source, edge_df$target))
+    cell_meta  <- cell_meta[keep_cells, , drop = FALSE]
+  }
+
+  if (if_showdifftype) {
+    edge_df <- edge_df[
+      cell_meta_ori[edge_df$source, "celltype"] != cell_meta_ori[edge_df$target, "celltype"],
+      , drop = FALSE
+    ]
+    keep_cells <- unique(c(edge_df$source, edge_df$target))
+    cell_meta  <- cell_meta[keep_cells, , drop = FALSE]
+  }
+
+  if (if_sample && nrow(cell_meta) > 0) {
+    n_sample <- max(1, floor(nrow(cell_meta) * sample_fraction))
+    sampled_idx <- sample(seq_len(nrow(cell_meta)), n_sample)
+    sampled_cells <- cell_meta$cellname[sampled_idx]
+
+    cell_meta <- cell_meta[sampled_idx, , drop = FALSE]
+    cell_meta_ori <- cell_meta_ori[sampled_cells, , drop = FALSE]
+    edge_df <- edge_df[
+      edge_df$source %in% sampled_cells & edge_df$target %in% sampled_cells,
+      , drop = FALSE
+    ]
+  }
+
+  list(cell_meta = cell_meta, cell_meta_ori = cell_meta_ori, edge_df = edge_df)
+}
+
+compute_degree_table <- function(cell_meta, cell_meta_ori, edge_df,
+                                 if_transform_degree = TRUE,
+                                 degree_cap = 10) {
+  if (!"interaction_num" %in% colnames(edge_df)) {
+    stop("edge_df must contain an 'interaction_num' column.")
+  }
+
+  degree_count <- edge_df %>%
+    pivot_longer(
+      cols = c("source", "target"),
+      names_to = "role",
+      values_to = "cellname"
+    ) %>%
+    group_by(cellname) %>%
+    summarise(degree = sum(interaction_num, na.rm = TRUE), .groups = "drop")
+
+  degree_count_full <- data.frame(
+    cellname = cell_meta_ori$cellname,
+    degree   = 0
+  )
+  degree_count_full$degree <- degree_count$degree[
+    match(degree_count_full$cellname, degree_count$cellname)
+  ]
+  degree_count_full$degree[is.na(degree_count_full$degree)] <- 0
+
+  if (if_transform_degree) {
+    degree_count_full$degree <- ifelse(
+      degree_count_full$degree > degree_cap,
+      degree_cap,
+      degree_count_full$degree
+    )
+  }
+
+  cell_meta <- cell_meta %>%
+    left_join(degree_count_full, by = "cellname")
+  cell_meta$degree[is.na(cell_meta$degree)] <- 0
+
+  cell_meta
+}
+
+prepare_cell_layout <- function(cell_meta, celltypes, min_width = 10) {
+  cell_meta <- cell_meta %>%
+    group_by(celltype) %>%
+    mutate(cell_index = row_number()) %>%
+    ungroup()
+
+  cell_counts <- table(cell_meta$celltype)
+  scaled_counts <- sqrt(cell_counts)
+  scaled_counts <- pmax(scaled_counts, min_width)
+
+  # Ensure all requested celltypes exist in the vector used by circos.initialize
+  scaled_counts_full <- setNames(rep(min_width, length(celltypes)), celltypes)
+  scaled_counts_full[names(scaled_counts)] <- scaled_counts
+
+  list(
+    cell_meta = cell_meta,
+    cell_counts = cell_counts,
+    scaled_counts = scaled_counts_full
+  )
+}
+
+draw_mi_circos <- function(cell_meta, edge_df, celltypes, celltype_colors,
+                           output_pdf, focus_celltype = "T cell",
+                           degree_cap = 10) {
+  cairo_pdf(
+    filename = output_pdf,
+    width = 30,
+    height = 30,
+    family = "Arial"
+  )
+
+  par(family = "Arial")
+
+  circos.clear()
+  circos.par(
+    start.degree = 180,
+    gap.degree = 2,
+    cell.padding = c(0, 0, 0, 0),
+    track.margin = c(0.01, 0.01),
+    canvas.xlim = c(-1.05, 1.05),
+    canvas.ylim = c(-1.05, 1.05)
+  )
+
+  celltypes_present <- intersect(celltypes, unique(cell_meta$celltype))
+  if (length(celltypes_present) == 0) {
+    stop("No requested celltypes are present in cell_meta.")
+  }
+
+  scaled_counts <- attr(cell_meta, "scaled_counts")
+  circos.initialize(
+    factors = celltypes_present,
+    xlim = cbind(
+      rep(0, length(celltypes_present)),
+      scaled_counts[celltypes_present]
+    )
+  )
+
+  # Outer ring
+  circos.trackPlotRegion(
+    ylim = c(0, 1),
+    track.height = 0.05,
+    bg.border = NA,
+    panel.fun = function(x, y) {}
+  )
+
+  for (ct in celltypes_present) {
+    highlight.sector(
+      sector.index = ct,
+      track.index = 1,
+      col = adjustcolor(celltype_colors[ct], alpha.f = 1.0),
+      border = celltype_colors[ct],
+      lwd = 1,
+      text = NULL
+    )
+
+    xlim <- get.cell.meta.data("xlim", sector.index = ct)
+    xcenter <- mean(xlim)
+    circos.text(
+      x = xcenter,
+      y = 2.5,
+      labels = shorten_ct(gsub("\\.", " ", ct)),
+      sector.index = ct,
+      facing = "bending.outside",
+      niceFacing = TRUE,
+      cex = 7,
+      col = "black"
+    )
+  }
+
+  # Degree bar track
+  max_degree <- max(cell_meta$degree)
+  cell_meta$scaled_index <- NA
+
+  circos.trackPlotRegion(
+    ylim = c(0, max_degree),
+    track.height = 0.15,
+    bg.border = NA,
+    panel.fun = function(x, y) {
+      sector <- get.cell.meta.data("sector.index")
+      cells  <- cell_meta[cell_meta$celltype == sector, , drop = FALSE]
+
+      if (nrow(cells) > 0) {
+        n_real   <- nrow(cells)
+        n_scaled <- get.cell.meta.data("xlim", sector.index = sector)[2]
+        x_pos <- (cells$cell_index / n_real) * n_scaled
+
+        cell_meta[cell_meta$cellname %in% cells$cellname, "scaled_index"] <<- x_pos
+
+        circos.rect(
+          xleft   = x_pos - (0.5 * n_scaled / n_real),
+          ybottom = 0,
+          xright  = x_pos + (0.5 * n_scaled / n_real),
+          ytop    = cells$degree,
+          sector.index = sector,
+          col     = adjustcolor(celltype_colors[sector], alpha.f = 0.8),
+          border  = NA
+        )
+      }
+    }
+  )
+
+  # Y axis
+  axis_breaks <- unique(c(0, 2, 4, 6, 8, degree_cap))
+  axis_labels <- as.character(axis_breaks)
+  axis_labels[length(axis_labels)] <- paste0(">", degree_cap)
+  axis_sector <- if (focus_celltype %in% celltypes_present) focus_celltype else celltypes_present[1]
+
+  circos.yaxis(
+    side = "left",
+    at = axis_breaks,
+    labels = axis_labels,
+    labels.cex = 1.5,
+    tick.length = 0.5,
+    sector.index = axis_sector,
+    track.index = get.current.track.index()
+  )
+
+  for (ct in celltypes_present) {
+    circos.lines(
+      x = get.cell.meta.data("xlim", sector.index = ct),
+      y = c(0, 0),
+      sector.index = ct,
+      col = "black",
+      lwd = 0.8
+    )
+  }
+
+  # Links
+  cell2info <- cell_meta %>%
+    select(cellname, celltype, scaled_index)
+
+  edge_index_plot <- edge_df %>%
+    left_join(cell2info, by = c("source" = "cellname")) %>%
+    rename(source_type = celltype, source_index = scaled_index) %>%
+    left_join(cell2info, by = c("target" = "cellname")) %>%
+    rename(target_type = celltype, target_index = scaled_index)
+
+  apply(edge_index_plot, 1, function(e) {
+    s_type <- e[["source_type"]]
+    t_type <- e[["target_type"]]
+    s_idx  <- as.numeric(e[["source_index"]])
+    t_idx  <- as.numeric(e[["target_index"]])
+
+    if (is.na(s_idx) || is.na(t_idx)) return(NULL)
+    if (!(s_type %in% celltypes_present) || !(t_type %in% celltypes_present)) return(NULL)
+
+    col_s <- celltype_colors[s_type]
+    h_val <- ifelse(s_type == t_type, 0.2, 0.8)
+
+    circos.link(
+      sector.index1 = s_type, point1 = s_idx,
+      sector.index2 = t_type, point2 = t_idx,
+      col    = adjustcolor(col_s, alpha.f = 0.3),
+      border = NA,
+      h      = h_val,
+      lwd    = 0.1
+    )
+  })
+
+  dev.off()
+
+  invisible(cell_meta)
+}
+```
+
+# 4. Read input data
+
+```{r read-data}
+start_time <- Sys.time()
+
+mi_data <- read_mi_data(
+  cell_meta_file = cell_meta_file,
+  edge_file = edge_file
+)
+
+cell_meta <- mi_data$cell_meta
+edge_index_all_choose <- mi_data$edge_df
+
+cat("Loaded cells:", nrow(cell_meta), "\n")
+cat("Loaded edges:", nrow(edge_index_all_choose), "\n")
+```
+
+# 5. Apply optional filtering
+
+This step keeps only the cells and edges that will be displayed.
+
+```{r filter-data}
+filtered <- filter_edges_and_cells(
+  cell_meta = cell_meta,
+  edge_df = edge_index_all_choose,
+  if_showdifftype = if_showdifftype,
+  if_showTcell = if_showTcell,
+  focus_celltype = focus_celltype,
+  if_sample = if_sample,
+  sample_fraction = sample_fraction
+)
+
+cell_meta <- filtered$cell_meta
+cell_meta_ori <- filtered$cell_meta_ori
+edge_index_all_choose <- filtered$edge_df
+
+cat("Cells after filtering:", nrow(cell_meta), "\n")
+cat("Edges after filtering:", nrow(edge_index_all_choose), "\n")
+```
+
+# 6. Compute weighted degree
+
+For each cell, the weighted degree is defined as the sum of `interaction_num` across all incident edges.
+
+```{r compute-degree}
+cell_meta <- compute_degree_table(
+  cell_meta = cell_meta,
+  cell_meta_ori = cell_meta_ori,
+  edge_df = edge_index_all_choose,
+  if_transform_degree = if_transform_degree,
+  degree_cap = degree_cap
+)
+
+summary(cell_meta$degree)
+```
+
+# 7. Prepare circular layout
+
+Here we assign cells to within-celltype positions and compute scaled sector widths.
+
+```{r prepare-layout}
+layout_info <- prepare_cell_layout(
+  cell_meta = cell_meta,
+  celltypes = celltypes,
+  min_width = 10
+)
+
+cell_meta <- layout_info$cell_meta
+scaled_counts <- layout_info$scaled_counts
+cell_counts <- layout_info$cell_counts
+
+celltype_colors <- setNames(color_set[seq_along(celltypes)], celltypes)
+
+print(cell_counts)
+
+# Store scaled_counts as an attribute so the plotting function can access it
+attr(cell_meta, "scaled_counts") <- scaled_counts
+```
+
+# 8. Draw and save the circos plot
+
+```{r make-plot}
+draw_mi_circos(
+  cell_meta = cell_meta,
+  edge_df = edge_index_all_choose,
+  celltypes = celltypes,
+  celltype_colors = celltype_colors,
+  output_pdf = output_pdf,
+  focus_celltype = focus_celltype,
+  degree_cap = degree_cap
+)
+
+cat("Saved figure to:", output_pdf, "\n")
+```
+
+# 9. Session summary
+
+```{r summary}
+end_time <- Sys.time()
+cat("Finished.\n")
+cat("Elapsed time:", round(difftime(end_time, start_time, units = "secs"), 2), "seconds\n")
+```
+
+# Notes for adapting this notebook
+
+When applying this notebook to a new dataset, the sections that usually need to change are:
+
+- `file_savepath_main`, input file names, and output file name;
+- the target celltype used for focused plotting;
+- the `celltypes` order;
+- the color palette;
+- any filtering condition specific to the dataset.
+
+The core functions for reading, filtering, degree calculation, layout preparation, and plotting can usually remain unchanged as long as the input tables use the same column names.

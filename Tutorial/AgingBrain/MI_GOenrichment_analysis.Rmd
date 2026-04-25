@@ -1,0 +1,210 @@
+---
+title: "GO Enrichment Visualization for MI29"
+author: "Junjie Tang"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+```
+
+# Overview
+
+This R Markdown document generates two final GO enrichment bubble plots for MI29:
+
+- **p1**: GO enrichment of top regulators (sender side)
+- **p2**: GO enrichment of top targets (receiver side)
+
+The workflow is organized into four steps:
+
+1. Load required packages and input files.
+2. Clean and standardize the GO enrichment tables.
+3. Define the final term order for the sender and receiver plots.
+4. Generate and save the two final figures.
+
+Only the final figures `p1` and `p2` are kept in this version. Intermediate figures from the original script have been removed.
+
+# Load packages and define paths
+
+```{r packages-and-paths}
+library(ggplot2)
+library(dplyr)
+library(stringr)
+
+result_dir <- "D:/SpiderNet/Results/AgingBrain/V1/SpiderNet_Result_dim30"
+
+toptarget_file <- file.path(result_dir, "GO_enrichment_toptarget_MI29.csv")
+topregulator_file <- file.path(result_dir, "GO_enrichment_topregulator_MI29.csv")
+```
+
+# Read input tables
+
+```{r read-data}
+GO_enrichment_toptarget_MI29 <- read.csv(toptarget_file)
+GO_enrichment_topregulator_MI29 <- read.csv(topregulator_file)
+```
+
+# Define helper function for data cleaning
+
+```{r helper-function}
+prepare_go_df <- function(df) {
+  df %>%
+    mutate(
+      # Remove GO accession IDs such as "(GO:XXXXXXX)" from the term labels.
+      Term_clean = str_replace(Term, "\\s*\\(GO:\\d+\\)", ""),
+      # Extract the number of overlapping genes from strings such as "5/120".
+      GeneCount = as.numeric(sub("/.*", "", Overlap)),
+      # Convert adjusted p-values to -log10 scale for plotting.
+      logP = -log10(Adjusted.P.value)
+    )
+}
+```
+
+# Prepare sender and receiver enrichment tables
+
+```{r prepare-data}
+df_sender <- prepare_go_df(GO_enrichment_topregulator_MI29)
+df_receiver <- prepare_go_df(GO_enrichment_toptarget_MI29)
+
+# Define the final display order for the sender enrichment plot (p1).
+order_p1 <- rev(c(
+  "regulation of interferon-gamma production",
+  "interferon-gamma-mediated signaling pathway",
+  "positive regulation of T cell cytokine production",
+  "cytokine-mediated signaling pathway",
+  "T cell activation",
+  "cellular senescence",
+  "positive regulation of cellular senescence"
+))
+
+# Define the final display order for the receiver enrichment plot (p2).
+order_p2 <- rev(c(
+  "inflammatory response",
+  "antigen receptor-mediated signaling pathway",
+  "positive regulation of leukocyte cell-cell adhesion",
+  "nucleotide-excision repair, DNA incision",
+  "global genome nucleotide-excision repair"
+))
+
+df_sender <- df_sender %>%
+  filter(Term_clean %in% order_p1) %>%
+  mutate(Term_clean = factor(Term_clean, levels = order_p1))
+
+df_receiver <- df_receiver %>%
+  filter(Term_clean %in% order_p2) %>%
+  mutate(Term_clean = factor(Term_clean, levels = order_p2))
+```
+
+# Define shared plotting scale
+
+```{r shared-scale}
+# Use a shared point-size scale so that p1 and p2 are visually comparable.
+all_logP <- c(df_sender$logP, df_receiver$logP)
+min_logP <- min(all_logP)
+max_logP <- max(all_logP)
+
+size_breaks <- c(2, 5, 8)
+```
+
+# Plot p1: sender-side GO enrichment
+
+```{r plot-p1, fig.width=7.8, fig.height=7}
+p1 <- ggplot(df_sender, aes(x = 1, y = Term_clean)) +
+  geom_point(aes(size = logP), color = "#FD2D2D") +
+  scale_size(
+    range = c(7, 15),
+    limits = c(min_logP, max_logP),
+    breaks = size_breaks,
+    name = "-log10(P)"
+  ) +
+  scale_y_discrete(position = "left") +
+  labs(x = NULL, y = NULL) +
+  theme_bw(base_size = 14) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 27, lineheight = 0.9)
+  )
+
+p1
+```
+
+```{r save-p1, eval=TRUE}
+ggsave(
+  file.path(result_dir, "GO_enrichment_topregulator_MI29_SingleColumn_BubblePlot.png"),
+  plot = p1,
+  width = 7.8,
+  height = 7,
+  dpi = 300
+)
+
+ggsave(
+  file.path(result_dir, "GO_enrichment_topregulator_MI29_SingleColumn_BubblePlot.pdf"),
+  plot = p1,
+  width = 7.8,
+  height = 7,
+  dpi = 300
+)
+```
+
+# Plot p2: receiver-side GO enrichment
+
+```{r plot-p2, fig.width=12, fig.height=7}
+p2 <- ggplot(df_receiver, aes(x = 1, y = Term_clean)) +
+  geom_point(aes(size = logP), color = "#FD2D2D") +
+  scale_size(
+    range = c(7, 15),
+    limits = c(min_logP, max_logP),
+    breaks = size_breaks,
+    name = "-log10(P)"
+  ) +
+  scale_y_discrete(position = "right") +
+  labs(x = NULL, y = NULL) +
+  theme_bw(base_size = 14) +
+  theme(
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(size = 27, lineheight = 0.9)
+  )
+
+p2
+```
+
+```{r save-p2, eval=TRUE}
+ggsave(
+  file.path(result_dir, "GO_enrichment_toptarget_MI29_SingleColumn_BubblePlot.png"),
+  plot = p2,
+  width = 12,
+  height = 7,
+  dpi = 300
+)
+
+ggsave(
+  file.path(result_dir, "GO_enrichment_toptarget_MI29_SingleColumn_BubblePlot.pdf"),
+  plot = p2,
+  width = 12,
+  height = 7,
+  dpi = 300
+)
+```
+
+# Session information
+
+```{r session-info}
+sessionInfo()
+```

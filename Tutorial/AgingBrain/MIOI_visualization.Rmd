@@ -1,0 +1,287 @@
+---
+title: "SpiderNet MI Circos Visualization"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+# Overview
+
+This report generates circos visualizations for SpiderNet meta-interaction outputs in the AgingBrain dataset. The current workflow focuses on three related plots for **MI-29**:
+
+1. A full cell-type interaction plot with node labels.
+2. A full cell-type interaction plot without labels.
+3. A T-cell-centered interaction plot colored by effect direction and significance.
+
+The report assumes that the input CSV files have already been exported to the SpiderNet result directory.
+
+# Setup
+
+```{r libraries}
+library(circlize)
+library(dplyr)
+library(scales)
+```
+
+```{r paths}
+result_dir <- "D:/SpiderNet/Results/AgingBrain/V1/SpiderNet_Result_dim30/"
+
+all_links_file <- file.path(result_dir, "MI-29_all_links.csv")
+tcell_links_file <- file.path(result_dir, "MI-29_Tcell_links.csv")
+
+output_all_labeled <- file.path(result_dir, "MI-29_all_CIRCOS_links_nodesColored_arrow.pdf")
+output_all_no_label <- file.path(result_dir, "MI-29_all_CIRCOS_links_nodesColored_arrow_no_label.png")
+output_tcell_signif <- file.path(result_dir, "MI29_Tcell_CIRCOS_links_nodesColored_arrow_significantColored.pdf")
+```
+
+# Shared definitions
+
+```{r shared-definitions}
+celltypes <- c(
+  "Neuron-Excitatory", "Neuron-Inhibitory", "Neuron-MSN", "Astrocyte", "Microglia", "Oligodendrocyte",
+  "OPC", "Endothelial", "Pericyte", "VSMC", "VLMC", "Ependymal", "Neuroblast", "NSC", "Macrophage",
+  "Neutrophil", "T cell", "B cell"
+)
+
+celltype_colors <- c(
+  "Neuron-Excitatory" = "#258B42",
+  "Neuron-Inhibitory" = "#9FCF89",
+  "Neuron-MSN" = "#98CB3B",
+  "Astrocyte" = "#4F6AB5",
+  "Microglia" = "#6BCCD7",
+  "Oligodendrocyte" = "#8ACEEC",
+  "OPC" = "#3FB7E7",
+  "Endothelial" = "#EB2024",
+  "Pericyte" = "#7F2321",
+  "VSMC" = "#F67F70",
+  "VLMC" = "#D25C5A",
+  "Ependymal" = "#909190",
+  "Neuroblast" = "#F7A45C",
+  "NSC" = "#F48B20",
+  "Macrophage" = "#7D287C",
+  "Neutrophil" = "#9750B4",
+  "T cell" = "#F321F8",
+  "B cell" = "#C176AE"
+)
+
+shorten_ct <- function(ct) {
+  dplyr::case_when(
+    ct == "Neuron-Excitatory" ~ "Neu-Exc.",
+    ct == "Neuron-Inhibitory" ~ "Neu-Inh.",
+    ct == "Neuron-MSN" ~ "Neu-MSN.",
+    ct == "Oligodendrocyte" ~ "Oligo.",
+    ct == "Neutrophil" ~ "Neut.",
+    ct == "Macrophage" ~ "Macro.",
+    ct == "Ependymal" ~ "Epend.",
+    ct == "Endothelial" ~ "Endo.",
+    ct == "Neuroblast" ~ "Nblast.",
+    ct == "Astrocyte" ~ "Astro.",
+    ct == "Microglia" ~ "Micro.",
+    ct == "Pericyte" ~ "Peri.",
+    TRUE ~ ct
+  )
+}
+
+initialize_circos_layout <- function(nodes, with_padding = TRUE) {
+  circos.clear()
+  circos.par(
+    gap.degree = 4,
+    start.degree = 90,
+    track.margin = c(0.01, 0.01),
+    cell.padding = if (with_padding) c(0.02, 0, 0.02, 0) else c(0, 0, 0, 0)
+  )
+  circos.initialize(
+    factors = nodes,
+    xlim = cbind(rep(0, length(nodes)), rep(1, length(nodes)))
+  )
+}
+
+add_sector_labels <- function(nodes, cex = 1.4) {
+  circos.trackPlotRegion(
+    ylim = c(0, 1),
+    track.height = 0.08,
+    bg.border = NA,
+    panel.fun = function(x, y) {
+      sector <- get.cell.meta.data("sector.index")
+      circos.text(
+        x = 0.5,
+        y = 2,
+        labels = shorten_ct(sector),
+        facing = "bending.outside",
+        niceFacing = TRUE,
+        cex = cex
+      )
+    }
+  )
+}
+
+add_invisible_track <- function() {
+  circos.trackPlotRegion(
+    ylim = c(0, 1),
+    track.height = 0.001,
+    bg.border = NA,
+    panel.fun = function(x, y) {}
+  )
+}
+
+draw_node_points <- function(nodes, point_size = 3.5) {
+  for (nd in nodes) {
+    circos.points(
+      x = 0.5,
+      y = 0,
+      sector.index = nd,
+      pch = 21,
+      cex = point_size,
+      bg = celltype_colors[nd],
+      col = "black"
+    )
+  }
+}
+
+draw_directed_links <- function(df) {
+  for (i in seq_len(nrow(df))) {
+    lw <- df$link_width[i]
+    circos.link(
+      df$Sender[i], 0.5,
+      df$Receiver[i], 0.5,
+      col = df$link_col[i],
+      border = NA,
+      lwd = lw,
+      directional = 1,
+      arr.length = 0.3,
+      arr.width = 0.3,
+      arr.lwd = lw * 0.4
+    )
+  }
+}
+```
+
+# Full MI-29 network across all cell-type pairs
+
+This section visualizes the full MI-29 interaction network. Link darkness and width both reflect interaction strength, and stronger links are plotted last so they remain visible on top.
+
+```{r all-links-data}
+df_all <- read.csv(all_links_file)
+
+df_all$Mean[is.na(df_all$Mean)] <- 0
+df_all$Mean <- df_all$Mean^1.3
+
+df_all <- df_all %>%
+  arrange(Mean)
+
+df_all$link_width <- scales::rescale(df_all$Mean, to = c(0.01, 3))
+width_floor <- quantile(df_all$link_width, 0.1)
+width_cutoff <- quantile(df_all$link_width, 0.8)
+df_all$link_width <- ifelse(df_all$link_width < width_cutoff, width_floor, df_all$link_width)
+df_all$link_col <- grey(1 - scales::rescale(df_all$Mean, to = c(0, 1)))
+
+nodes_all <- intersect(celltypes, unique(c(df_all$Sender, df_all$Receiver)))
+```
+
+## Labeled version
+
+```{r all-links-labeled, eval=FALSE}
+pdf(output_all_labeled, width = 10, height = 10)
+
+initialize_circos_layout(nodes_all)
+add_sector_labels(nodes_all, cex = 1.4)
+draw_directed_links(df_all)
+draw_node_points(nodes_all, point_size = 3.5)
+
+circos.clear()
+dev.off()
+```
+
+## No-label version
+
+This version is useful when the figure is intended for composition in a multi-panel layout and text labels are added elsewhere.
+
+```{r all-links-no-label, eval=FALSE}
+png(output_all_no_label, width = 1800, height = 1800, res = 300)
+
+initialize_circos_layout(nodes_all, with_padding = FALSE)
+add_invisible_track()
+draw_directed_links(df_all)
+draw_node_points(nodes_all, point_size = 2.2)
+
+circos.clear()
+dev.off()
+```
+
+# T-cell-centered MI-29 network
+
+This section focuses on T-cell outgoing links. Significant edges are colored by correlation, while non-significant edges are shown in gray.
+
+```{r tcell-data}
+df_tcell <- read.csv(tcell_links_file)
+
+df_tcell$Corr[is.na(df_tcell$Corr)] <- 0
+df_tcell$P.value[is.na(df_tcell$P.value)] <- 1
+df_tcell$Sender <- "T cell"
+
+df_tcell$link_width <- scales::rescale(df_tcell$Mean, to = c(1, 6))
+
+col_fun <- colorRamp2(
+  c(-0.4, 0, 0.4),
+  c("#5463FF", "#ECECEC", "#FF1818")
+)
+
+df_tcell$link_col <- ifelse(
+  df_tcell$P.value >= 0.05,
+  "#BFBFBF",
+  col_fun(df_tcell$Corr)
+)
+
+nodes_tcell <- intersect(celltypes, unique(c(df_tcell$Sender, df_tcell$Receiver)))
+```
+
+```{r tcell-plot, eval=FALSE}
+cairo_pdf(
+  filename = output_tcell_signif,
+  width = 10,
+  height = 10,
+  family = "Arial"
+)
+par(family = "Arial")
+
+initialize_circos_layout(nodes_tcell)
+add_sector_labels(nodes_tcell, cex = 1.4)
+
+for (i in seq_len(nrow(df_tcell))) {
+  lw <- df_tcell$link_width[i]
+  this_col <- if (df_tcell$P.value[i] >= 0.05) {
+    adjustcolor("#BFBFBF", alpha.f = 0.8)
+  } else {
+    adjustcolor(df_tcell$link_col[i], alpha.f = 1.0)
+  }
+
+  circos.link(
+    df_tcell$Sender[i], 0.5,
+    df_tcell$Receiver[i], 0.5,
+    col = this_col,
+    border = NA,
+    lwd = lw,
+    directional = 1,
+    arr.length = 0.3,
+    arr.width = 0.3,
+    arr.lwd = lw * 0.4
+  )
+}
+
+draw_node_points(nodes_tcell, point_size = 3.5)
+
+circos.clear()
+dev.off()
+```
+
+# Notes
+
+- Update `result_dir` if the MI export files are stored in a different SpiderNet result folder.
+- To visualize another MI, replace the input CSV file names and adjust the output file names accordingly.
+- The plotting chunks are set to `eval = FALSE` by default so the document can be reviewed without regenerating files automatically. Set them to `TRUE` when you are ready to export the figures.

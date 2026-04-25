@@ -1,0 +1,409 @@
+---
+title: "Pancancer MI link visualization"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE
+)
+```
+
+# Overview
+
+This notebook visualizes pancancer meta-interaction links in a circular layout.
+It is adapted to the pancancer MI-2 link table and keeps the workflow modular so
+that the plotting settings, cell-type order, and file paths can be edited in one place.
+
+The workflow includes:
+
+1. define pancancer-specific file paths and plotting options;
+2. load the MI-2 sender-receiver summary table;
+3. preprocess link weights and keep the desired node order;
+4. prepare plotting helpers for node labels, link styling, and self-loops;
+5. draw a labeled directional circos plot;
+6. draw a no-label directional circos plot for figure assembly.
+
+# 1. User settings
+
+Edit this section first when applying the notebook to a new result directory.
+
+```{r user-settings}
+# Main input/output directory
+file_savepath_main <- "D:/SpiderNet/Results/Pancancer/V1/SpiderNet_Result_dim11/"
+
+# Input file generated from the Python analysis
+mi_link_file <- file.path(file_savepath_main, "MI2_all_links.csv")
+
+# Output figures
+output_pdf_labeled  <- file.path(file_savepath_main, "MI2_all_CIRCOS_links_nodesColored_arrow.pdf")
+output_png_nolabel  <- file.path(file_savepath_main, "MI2_all_CIRCOS_links_nodesColored_arrow_NO_LABEL.png")
+
+# Link-weight display options
+link_power        <- 2
+link_width_range  <- c(0.01, 4)
+quantile_floor_hi <- 0.90
+quantile_floor_lo <- 0.10
+
+# Cell-type order on the circle
+celltypes <- c(
+  "B cell",
+  "Breast-cancercell",
+  "CD4_T",
+  "CD8_T/NK",
+  "Colon-cancercell",
+  "DC",
+  "Endothelial",
+  "Epithelial",
+  "Fibroblast",
+  "Liver-cancercell",
+  "Lung-cancercell",
+  "Macrophage",
+  "Mast cell",
+  "Melanoma-cancercell",
+  "Ovarian-cancercell",
+  "Prostate-cancercell",
+  "Treg",
+  "Uterine-cancercell",
+  "low_exp"
+)
+
+# Cell-type colors
+color_set <- c(
+  "#8894F1",
+  "#7F3480",
+  "#FF259E",
+  "#FF52DB",
+  "#F7B2EF",
+  "#2C5E1A",
+  "#029991",
+  "#E384FF",
+  "#944E13",
+  "#FF8B6C",
+  "#B37166",
+  "#74650F",
+  "#7228B8",
+  "#009D4E",
+  "#DD0303",
+  "#028DCE",
+  "#DE0878",
+  "#FAB12F",
+  "#BBC58F"
+)
+```
+
+# 2. Load packages
+
+```{r packages}
+library(circlize)
+library(dplyr)
+library(readr)
+library(scales)
+```
+
+# 3. Helper functions
+
+These helper functions keep the main plotting section concise and easier to adapt.
+
+```{r helper-functions}
+shorten_celltype <- function(ct) {
+  mapping <- c(
+    "Breast-cancercell"   = "Breast-tumor",
+    "Colon-cancercell"    = "Colon-tumor",
+    "Liver-cancercell"    = "Liver-tumor",
+    "Lung-cancercell"     = "Lung-tumor",
+    "Melanoma-cancercell" = "Melanoma",
+    "Ovarian-cancercell"  = "Ovarian-tumor",
+    "Prostate-cancercell" = "Prostate-tumor",
+    "Uterine-cancercell"  = "Uterine-tumor"
+  )
+
+  ifelse(ct %in% names(mapping), mapping[ct], ct)
+}
+
+read_pancancer_links <- function(mi_link_file) {
+  df <- read_csv(mi_link_file, show_col_types = FALSE) %>% as.data.frame()
+
+  stopifnot(all(c("Sender", "Receiver", "Mean") %in% colnames(df)))
+
+  df
+}
+
+prepare_link_dataframe <- function(df,
+                                   link_power = 3,
+                                   link_width_range = c(0.01, 3),
+                                   quantile_floor_hi = 0.80,
+                                   quantile_floor_lo = 0.10) {
+  df_use <- df
+
+  df_use$Mean[is.na(df_use$Mean)] <- 0
+  df_use$Mean <- df_use$Mean ^ link_power
+
+  # Draw weak links first and strong links last so stronger links stay on top.
+  df_use <- df_use %>% arrange(Mean)
+
+  df_use$link_width <- scales::rescale(df_use$Mean, to = link_width_range)
+
+  q_hi <- quantile(df_use$link_width, quantile_floor_hi, na.rm = TRUE)
+  q_lo <- quantile(df_use$link_width, quantile_floor_lo, na.rm = TRUE)
+  df_use$link_width <- ifelse(df_use$link_width < q_hi, q_lo, df_use$link_width)
+
+  # Stronger links are shown with darker grayscale.
+  df_use$link_col <- grey(1 - scales::rescale(df_use$Mean, to = c(0, 1)))
+
+  df_use
+}
+
+get_nodes_in_order <- function(df, celltypes) {
+  celltypes[celltypes %in% unique(c(df$Sender, df$Receiver))]
+}
+
+initialize_circos_layout <- function(nodes, with_labels = TRUE, label_cex = 1.4) {
+  circos.clear()
+  circos.par(
+    gap.degree = 4,
+    start.degree = 90,
+    track.margin = c(0.01, 0.01),
+    cell.padding = c(0, 0, 0, 0)
+  )
+
+  circos.initialize(
+    factors = nodes,
+    xlim = cbind(rep(0, length(nodes)), rep(1, length(nodes)))
+  )
+
+  if (with_labels) {
+    circos.trackPlotRegion(
+      ylim = c(0, 1),
+      track.height = 0.08,
+      bg.border = NA,
+      panel.fun = function(x, y) {
+        sector <- get.cell.meta.data("sector.index")
+        circos.text(
+          x = 0.5,
+          y = 2.6,
+          labels = shorten_celltype(sector),
+          facing = "bending.outside",
+          niceFacing = TRUE,
+          cex = label_cex
+        )
+      }
+    )
+  } else {
+    circos.trackPlotRegion(
+      ylim = c(0, 1),
+      track.height = 0.001,
+      bg.border = NA,
+      panel.fun = function(x, y) {}
+    )
+  }
+}
+
+draw_nonself_links <- function(df_nonself) {
+  if (nrow(df_nonself) == 0) {
+    return(invisible(NULL))
+  }
+
+  for (i in seq_len(nrow(df_nonself))) {
+    lw <- df_nonself$link_width[i]
+    circos.link(
+      df_nonself$Sender[i], 0.5,
+      df_nonself$Receiver[i], 0.5,
+      col = df_nonself$link_col[i],
+      border = NA,
+      lwd = lw,
+      directional = 1,
+      arr.length = 0.3,
+      arr.width = 0.3,
+      arr.lwd = lw * 0.4
+    )
+  }
+}
+
+draw_self_loops <- function(df_self) {
+  if (nrow(df_self) == 0) {
+    return(invisible(NULL))
+  }
+
+  df_self <- df_self %>%
+    group_by(Sender) %>%
+    mutate(
+      loop_id = row_number(),
+      loop_n  = n()
+    ) %>%
+    ungroup()
+
+  for (i in seq_len(nrow(df_self))) {
+    nd  <- df_self$Sender[i]
+    lw  <- df_self$link_width[i]
+    col <- df_self$link_col[i]
+
+    # Spread multiple self-loops slightly within the node sector.
+    t <- if (df_self$loop_n[i] == 1) {
+      0
+    } else {
+      (df_self$loop_id[i] - 1) / (df_self$loop_n[i] - 1)
+    }
+    center <- 0.5 + (t - 0.5) * 0.08
+
+    # Increase the loop span slightly for stronger links.
+    span <- 0.055 + 0.015 * scales::rescale(lw, to = c(0, 1))
+    span <- 4 * span
+    x1 <- max(0.02, min(0.98, center - span))
+    x2 <- max(0.02, min(0.98, center + span))
+
+    # Keep self-loops close to the node ring.
+    rou <- 0.97
+    hgt <- 0.045 + 0.03 * scales::rescale(lw, to = c(0, 1))
+
+    circos.link(
+      nd, x1,
+      nd, x2,
+      col = col,
+      border = NA,
+      lwd = lw,
+      directional = 1,
+      arr.length = 0.22,
+      arr.width = 0.22,
+      arr.lwd = lw * 0.4,
+      rou1 = rou,
+      rou2 = rou,
+      h = -hgt
+    )
+  }
+}
+
+draw_node_points <- function(nodes, celltype_colors, point_cex = 3.2) {
+  for (nd in nodes) {
+    circos.points(
+      x = 0.5,
+      y = 0,
+      sector.index = nd,
+      pch = 21,
+      cex = point_cex,
+      bg = celltype_colors[nd],
+      col = "black"
+    )
+  }
+}
+
+draw_labeled_circos <- function(df_plot, nodes, celltype_colors, output_pdf) {
+  pdf(output_pdf, width = 10, height = 10)
+
+  initialize_circos_layout(nodes = nodes, with_labels = TRUE, label_cex = 1.4)
+
+  df_self    <- df_plot %>% filter(Sender == Receiver)
+  df_nonself <- df_plot %>% filter(Sender != Receiver)
+
+  draw_nonself_links(df_nonself)
+  draw_self_loops(df_self)
+  draw_node_points(nodes, celltype_colors, point_cex = 3.2)
+
+  circos.clear()
+  dev.off()
+}
+
+draw_nolabel_circos <- function(df_plot, nodes, celltype_colors, output_png) {
+  png(output_png, width = 1800, height = 1800, res = 300)
+
+  initialize_circos_layout(nodes = nodes, with_labels = FALSE)
+  draw_nonself_links(df_plot)
+  draw_node_points(nodes, celltype_colors, point_cex = 2.2)
+
+  circos.clear()
+  dev.off()
+}
+```
+
+# 4. Read input data
+
+```{r read-data}
+start_time <- Sys.time()
+
+if (!file.exists(mi_link_file)) {
+  stop(paste("Cannot find input file:", mi_link_file))
+}
+
+mi_links <- read_pancancer_links(mi_link_file)
+
+cat("Loaded sender-receiver links:", nrow(mi_links), "\n")
+print(head(mi_links))
+```
+
+# 5. Prepare node colors and plotting dataframe
+
+```{r prepare-data}
+celltype_colors <- setNames(color_set[seq_along(celltypes)], celltypes)
+
+nodes <- get_nodes_in_order(mi_links, celltypes)
+if (length(nodes) == 0) {
+  stop("None of the requested cell types are present in the MI link table.")
+}
+
+df_plot <- prepare_link_dataframe(
+  df = mi_links,
+  link_power = link_power,
+  link_width_range = link_width_range,
+  quantile_floor_hi = quantile_floor_hi,
+  quantile_floor_lo = quantile_floor_lo
+)
+
+cat("Nodes shown on the circle:", length(nodes), "\n")
+print(nodes)
+```
+
+# 6. Draw the labeled circos plot
+
+This version includes sector labels and is typically used as the main figure.
+
+```{r draw-labeled-circos}
+draw_labeled_circos(
+  df_plot = df_plot,
+  nodes = nodes,
+  celltype_colors = celltype_colors,
+  output_pdf = output_pdf_labeled
+)
+
+cat("Saved labeled plot to:", output_pdf_labeled, "\n")
+```
+
+# 7. Draw the no-label circos plot
+
+This version omits sector labels and is useful when labels are added later in Illustrator.
+
+```{r draw-nolabel-circos}
+draw_nolabel_circos(
+  df_plot = df_plot,
+  nodes = nodes,
+  celltype_colors = celltype_colors,
+  output_png = output_png_nolabel
+)
+
+cat("Saved no-label plot to:", output_png_nolabel, "\n")
+```
+
+# 8. Session summary
+
+```{r summary}
+end_time <- Sys.time()
+cat("Finished.\n")
+cat("Elapsed time:", round(difftime(end_time, start_time, units = "secs"), 2), "seconds\n")
+```
+
+# Notes for adapting this notebook
+
+When adapting this notebook to another MI file or another dimension, the sections that usually need to change are:
+
+- `file_savepath_main`, input file name, and output file names;
+- the cell-type order in `celltypes`;
+- the color palette in `color_set`;
+- the link-weight transform and rescaling settings;
+- whether the no-label output should be PDF or PNG.
+
+The helper functions for reading, preprocessing, node ordering, and circos plotting can usually remain unchanged as long as the input table contains the columns `Sender`, `Receiver`, and `Mean`.
