@@ -1,0 +1,405 @@
+---
+title: "PerturbFISH GO Enrichment Visualization"
+output: html_notebook
+---
+
+This notebook reorganizes the provided GO enrichment plotting script into a cleaner, easier-to-follow workflow. It focuses on loading GO enrichment results for one meta-interaction (MI), preparing sender and receiver enrichment tables, and generating single-column bubble plots for publication-style visualization.
+
+## 1. Setup
+
+```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width = 8,
+  fig.height = 6
+)
+
+library(ggplot2)
+library(dplyr)
+library(stringr)
+```
+
+## 2. User settings
+
+Edit this section first when switching to another result folder or MI.
+
+```{r user-settings}
+###############################################################################
+# Main inputs
+###############################################################################
+
+# Main result directory
+RESULT_DIR <- "D:/SpiderNet/Results/PerturbFISH/V1/SpiderNet_Result_dim23"
+
+# Meta-interaction of interest
+# MI_OI <- "MI10"
+# # MI_OI <- "MI8"
+MI_OI <- "MI17"
+# MI_OI <- "MI13"
+
+###############################################################################
+# Plot settings
+###############################################################################
+
+BASIC_BUBBLE_LOW_COLOR  <- "#8CC7FF"
+BASIC_BUBBLE_HIGH_COLOR <- "#004DA8"
+SINGLE_COLUMN_COLOR     <- "#FD2D2D"
+
+# Whether to display GO IDs in the single-column plots
+SHOW_GO_ID_IN_SINGLE_COLUMN <- TRUE
+
+###############################################################################
+# Optional manual term order
+# Set to NULL to use automatic ordering by adjusted p-value
+###############################################################################
+
+SENDER_TERM_ORDER   <- NULL
+RECEIVER_TERM_ORDER <- NULL
+
+# if (MI_OI == "MI10") {
+#   SENDER_TERM_ORDER <- rev(c(
+#     "response to interleukin-1 (GO:0070555)",
+#     "cellular response to lipopolysaccharide (GO:0071222)",
+#     "positive regulation of interleukin-8 production (GO:0032757)",
+#     "positive regulation of leukocyte chemotaxis (GO:0002690)",
+#     "CD40 signaling pathway (GO:0023035)",
+#     "regulation of protein phosphorylation (GO:0001932)"
+#   ))
+# 
+#   RECEIVER_TERM_ORDER <- rev(c(
+#     "cellular response to cytokine stimulus (GO:0071345)",
+#     "regulation of protein phosphorylation (GO:0001932)",
+#     "positive regulation of protein kinase activity (GO:0045860)",
+#     "integrin-mediated signaling pathway (GO:0007229)",
+#     "leukocyte cell-cell adhesion (GO:0007159)",
+#     "lamellipodium assembly (GO:0030032)",
+#     "CD40 signaling pathway (GO:0023035)",
+#     "positive regulation of protein kinase B signaling (GO:0051897)"
+#   ))
+# } else if (MI_OI == "MI8") {
+#   SENDER_TERM_ORDER <- rev(c(
+#     "I-kappaB kinase/NF-kappaB signaling (GO:0007249)",
+#     "TRIF-dependent toll-like receptor signaling pathway (GO:0035666)",
+#     "transmembrane receptor protein tyrosine kinase signaling pathway (GO:0007169)",
+#     "phosphatidylinositol 3-kinase signaling (GO:0014065)"
+#   ))
+# 
+#   RECEIVER_TERM_ORDER <- rev(c(
+#     "type I interferon signaling pathway (GO:0060337)",
+#     "antigen processing and presentation of peptide antigen via MHC class I (GO:0002474)",
+#     "T cell receptor signaling pathway (GO:0050852)",
+#     "positive regulation of protein kinase B signaling (GO:0051897)"
+#   ))
+# }
+if (MI_OI == "MI17") {
+  SENDER_TERM_ORDER <- rev(c(
+    "cellular response to cytokine stimulus (GO:0071345)",
+    "response to interleukin-1 (GO:0070555)",
+    "cellular response to reactive oxygen species (GO:0034614)",
+    "transforming growth factor beta receptor signaling pathway (GO:0007179)",
+    "epithelial to mesenchymal transition (GO:0001837)",
+    "extracellular matrix organization (GO:0030198)"
+  ))
+
+  RECEIVER_TERM_ORDER <- rev(c(
+    "negative regulation of apoptotic process (GO:0043066)",
+    "response to endoplasmic reticulum stress (GO:0034976)",
+    "cellular response to reactive oxygen species (GO:0034614)",
+    "integrin-mediated signaling pathway (GO:0007229)",
+    "heterotypic cell-cell adhesion (GO:0034113)",
+    "regulation of pathway-restricted SMAD protein phosphorylation (GO:0060393)"
+  ))
+} else if (MI_OI == "MI13") {
+  SENDER_TERM_ORDER <- rev(c(
+    "I-kappaB kinase/NF-kappaB signaling (GO:0007249)",
+    "TRIF-dependent toll-like receptor signaling pathway (GO:0035666)",
+    "transmembrane receptor protein tyrosine kinase signaling pathway (GO:0007169)",
+    "phosphatidylinositol 3-kinase signaling (GO:0014065)"
+  ))
+
+  RECEIVER_TERM_ORDER <- rev(c(
+    "type I interferon signaling pathway (GO:0060337)",
+    "antigen processing and presentation of peptide antigen via MHC class I (GO:0002474)",
+    "T cell receptor signaling pathway (GO:0050852)",
+    "positive regulation of protein kinase B signaling (GO:0051897)"
+  ))
+}
+```
+
+## 3. Helper functions
+
+```{r helper-functions}
+build_go_file_paths <- function(result_dir, mi_oi) {
+  list(
+    target_csv    = file.path(result_dir, paste0("GO_", mi_oi, "_target_enrichment.csv")),
+    regulator_csv = file.path(result_dir, paste0("GO_", mi_oi, "_regulator_enrichment.csv"))
+  )
+}
+
+prepare_go_dataframe <- function(df) {
+  df %>%
+    mutate(
+      Term_clean = str_replace(Term, "\\s*\\(GO:\\d+\\)", ""),
+      GeneCount  = as.numeric(sub("/.*", "", Overlap)),
+      logP       = -log10(pmax(Adjusted.P.value, .Machine$double.xmin))
+    ) %>%
+    arrange(Adjusted.P.value)
+}
+
+apply_term_order <- function(df,
+                             term_order = NULL,
+                             use_full_term = FALSE,
+                             keep_only_ordered_terms = FALSE) {
+  term_col <- if (use_full_term) "Term" else "Term_clean"
+
+  if (is.null(term_order)) {
+    df[[term_col]] <- factor(df[[term_col]], levels = unique(df[[term_col]]))
+    return(df)
+  }
+
+  ordered_terms <- term_order[term_order %in% unique(df[[term_col]])]
+
+  if (keep_only_ordered_terms) {
+    df <- df[df[[term_col]] %in% ordered_terms, , drop = FALSE]
+    df[[term_col]] <- factor(df[[term_col]], levels = ordered_terms)
+  } else {
+    remaining_terms <- setdiff(unique(df[[term_col]]), ordered_terms)
+    df[[term_col]] <- factor(df[[term_col]], levels = c(ordered_terms, remaining_terms))
+  }
+
+  df
+}
+
+plot_basic_bubble <- function(df, output_path, low_color, high_color,
+                              width = 8, height = 6, dpi = 300) {
+  p <- ggplot(df, aes(x = logP, y = Term_clean)) +
+    geom_point(aes(size = GeneCount, color = logP)) +
+    scale_color_gradient(low = low_color, high = high_color) +
+    scale_size(range = c(4, 10)) +
+    labs(
+      x = "-log10(P value)",
+      y = "",
+      size = "Gene count",
+      color = "-log10(P)"
+    ) +
+    theme_bw(base_size = 14) +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.text.y = element_text(size = 12),
+      axis.title.x = element_text(size = 14)
+    )
+
+  print(p)
+  ggsave(output_path, plot = p, width = width, height = height, dpi = dpi)
+}
+
+plot_single_column_bubble <- function(df,
+                                      output_pdf,
+                                      point_color,
+                                      size_limits,
+                                      size_breaks,
+                                      y_axis_position = c("left", "right"),
+                                      width = 6.5,
+                                      height = 7,
+                                      dpi = 300) {
+  y_axis_position <- match.arg(y_axis_position)
+
+  p <- ggplot(df, aes(x = 1, y = DisplayTerm)) +
+    geom_point(aes(size = logP), color = point_color) +
+    scale_size(
+      range  = c(3, 10),
+      limits = size_limits,
+      breaks = size_breaks,
+      name   = "-log10(P)",
+      guide  = guide_legend(
+        override.aes = list(
+          size = scales::rescale(
+            size_breaks,
+            to   = c(3, 10),
+            from = size_limits
+          ),
+          color = point_color
+        )
+      )
+    ) +
+    scale_y_discrete(position = y_axis_position) +
+    labs(x = "", y = "") +
+    theme_bw(base_size = 14) +
+    theme(
+      panel.grid.major = element_blank(),
+      panel.grid.minor = element_blank(),
+      axis.text.x      = element_blank(),
+      axis.ticks.x     = element_blank(),
+      axis.text.y      = element_text(size = 27, lineheight = 0.9)
+    )
+
+  print(p)
+  ggsave(output_pdf, plot = p, width = width, height = height, dpi = dpi)
+}
+```
+
+## 4. Build file paths and load GO enrichment tables
+
+```{r load-go-tables}
+go_paths <- build_go_file_paths(RESULT_DIR, MI_OI)
+
+go_paths
+```
+
+```{r read-go-tables}
+GO_enrichment_toptarget    <- read.csv(go_paths$target_csv)
+GO_enrichment_topregulator <- read.csv(go_paths$regulator_csv)
+
+cat("Receiver table rows:", nrow(GO_enrichment_toptarget), "\n")
+cat("Sender table rows:", nrow(GO_enrichment_topregulator), "\n")
+```
+
+## 5. Prepare sender and receiver enrichment tables
+
+```{r prepare-data}
+df_receiver <- prepare_go_dataframe(GO_enrichment_toptarget)
+df_sender   <- prepare_go_dataframe(GO_enrichment_topregulator)
+```
+
+```{r preview-data}
+head(df_sender)
+head(df_receiver)
+```
+
+## 6. Prepare data for single-column bubble plots
+
+Use one shared `-log10(adjusted p-value)` scale across sender and receiver so the two plots are directly comparable.
+
+```{r prepare-single-column-data}
+all_logP <- c(df_sender$logP, df_receiver$logP)
+
+min_logP <- min(all_logP)
+max_logP <- max(all_logP)
+
+size_breaks <- c(
+  -log10(0.05),
+  -log10(0.01),
+  -log10(0.001)
+)
+
+size_limits <- range(c(min_logP, max_logP, size_breaks))
+
+if (SHOW_GO_ID_IN_SINGLE_COLUMN) {
+  df_sender$DisplayTerm   <- df_sender$Term
+  df_receiver$DisplayTerm <- df_receiver$Term
+} else {
+  df_sender$DisplayTerm   <- df_sender$Term_clean
+  df_receiver$DisplayTerm <- df_receiver$Term_clean
+}
+
+
+df_sender <- apply_term_order(
+  df = df_sender,
+  term_order = SENDER_TERM_ORDER,
+  use_full_term = SHOW_GO_ID_IN_SINGLE_COLUMN,
+  keep_only_ordered_terms = TRUE
+)
+
+df_receiver <- apply_term_order(
+  df = df_receiver,
+  term_order = RECEIVER_TERM_ORDER,
+  use_full_term = SHOW_GO_ID_IN_SINGLE_COLUMN,
+  keep_only_ordered_terms = TRUE
+)
+
+if (SHOW_GO_ID_IN_SINGLE_COLUMN) {
+  df_sender$DisplayTerm   <- factor(df_sender$DisplayTerm, levels = levels(df_sender$Term))
+  df_receiver$DisplayTerm <- factor(df_receiver$DisplayTerm, levels = levels(df_receiver$Term))
+} else {
+  df_sender$DisplayTerm   <- factor(df_sender$DisplayTerm, levels = levels(df_sender$Term_clean))
+  df_receiver$DisplayTerm <- factor(df_receiver$DisplayTerm, levels = levels(df_receiver$Term_clean))
+}
+
+list(
+  sender_terms   = levels(df_sender$DisplayTerm),
+  receiver_terms = levels(df_receiver$DisplayTerm),
+  size_limits    = size_limits,
+  size_breaks    = size_breaks
+)
+df_sender
+
+```
+
+## 7. Generate single-column bubble plots
+
+These are the main output plots used in the original script.
+
+### 7.1 Sender / regulator plot
+
+```{r plot-sender, fig.width=13, fig.height=7}
+# if (MI_OI == "MI10") {
+#   width_use = 13
+# } else if (MI_OI == "MI8") {
+#   width_use = 16
+# }
+if (MI_OI == "MI17") {
+  width_use = 15
+} else if (MI_OI == "MI13") {
+  width_use = 16
+}
+plot_single_column_bubble(
+  df = df_sender,
+  output_pdf = file.path(
+    RESULT_DIR,
+    paste0("GO_enrichment_topregulator_", MI_OI, "_SingleColumn_BubblePlot.pdf")
+  ),
+  point_color     = SINGLE_COLUMN_COLOR,
+  size_limits     = size_limits,
+  size_breaks     = size_breaks,
+  y_axis_position = "left",
+  width           = width_use,
+  height          = 7
+)
+```
+
+### 7.2 Receiver / target plot
+
+```{r plot-receiver, fig.width=12.8, fig.height=7}
+# if (MI_OI == "MI10") {
+#   width_use = 12.8
+# } else if (MI_OI == "MI8") {
+#   width_use = 17
+# }
+if (MI_OI == "MI17") {
+  width_use = 16
+} else if (MI_OI == "MI13") {
+  width_use = 17
+}
+
+plot_single_column_bubble(
+  df = df_receiver,
+  output_pdf = file.path(
+    RESULT_DIR,
+    paste0("GO_enrichment_toptarget_", MI_OI, "_SingleColumn_BubblePlot.pdf")
+  ),
+  point_color     = SINGLE_COLUMN_COLOR,
+  size_limits     = size_limits,
+  size_breaks     = size_breaks,
+  y_axis_position = "right",
+  width           = width_use,
+  height          = 7
+)
+```
+
+## 8. Output summary
+
+```{r output-summary}
+cat("Main output directory:\n", RESULT_DIR, "\n\n")
+cat("Main figures:\n")
+cat("- ", file.path(RESULT_DIR, paste0("GO_enrichment_topregulator_", MI_OI, "_SingleColumn_BubblePlot.pdf")), "\n", sep = "")
+cat("- ", file.path(RESULT_DIR, paste0("GO_enrichment_toptarget_", MI_OI, "_SingleColumn_BubblePlot.pdf")), "\n", sep = "")
+```
+
+## 9. Session info
+
+```{r session-info}
+sessionInfo()
+```
