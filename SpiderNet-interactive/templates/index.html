@@ -1,180 +1,167 @@
 {% extends "base.html" %}
 
-{% block title %}{{ app_title }} - Home{% endblock %}
+{% block title %}{{ app_title }}{% endblock %}
 
 {% block content %}
 <div class="container">
-  <!-- Header -->
-  <div class="row mb-5">
-    <div class="col-12">
-      <h1 class="display-5 mb-4">
-        <i class="fas fa-project-diagram text-primary me-2"></i>
-        SpiderNet: Interpretable modeling of intercellular meta-interactions
-      </h1>
-    </div>
 
+  {# -- Hero ------------------------------------------------------------- #}
+  <section class="hero fx-rise" aria-labelledby="hero-title">
+    <div class="row g-5 align-items-center">
+      <div class="col-lg-6">
+        <p class="hero__eyebrow">SpiderNet · v1</p>
+        <h1 class="hero__title" id="hero-title">
+          Interpretable modeling of intercellular <em>meta-interactions</em>
+        </h1>
+        <p class="hero__lede">
+          A framework for learning cell–cell communication as <em>directional modules</em>
+          of multicellular regulation — from spatial transcriptomics, anchored in biology.
+        </p>
+        <div class="d-flex gap-2 flex-wrap mt-4">
+          <a href="#datasets" class="btn btn-primary">Browse datasets</a>
+          <a href="#modules" class="btn btn-outline-secondary">Four modules</a>
+        </div>
+      </div>
+
+      <div class="col-lg-6">
+        <a href="{{ url_for('static', filename='SpiderNet_figure_1_v6.pdf') }}" target="_blank" rel="noopener"
+           class="hero__figure d-block" aria-label="Open the high-resolution method figure">
+          <img src="{{ url_for('static', filename='spidernet_method_hq.png') }}"
+               alt="SpiderNet method overview — ligand-receptor coexpression encoded into directional meta-interaction modules">
+        </a>
+        <p class="hero__caption">Method overview · click for high-resolution PDF</p>
+      </div>
+    </div>
+  </section>
+
+  {# -- Long-form intro ------------------------------------------------- #}
+  <section class="row g-5 mb-5" aria-label="About SpiderNet">
     <div class="col-lg-7">
       <p>
-        SpiderNet is an interpretable framework that learns cell-cell meta-interaction representations from spatial transcriptomics data
-        as directional modules of multicellular regulation. Each meta-interaction represents a latent, coordinated communication module
-        defined over ordered sender-receiver cell pairs, linking sender regulators, ligand-receptor bridges, and receiver targets.
+        Each meta-interaction represents a latent, coordinated communication module defined over ordered
+        sender–receiver cell pairs, linking sender regulators, ligand–receptor bridges, and receiver targets.
+        By jointly modeling co-expression and gene expression across ordered pairs, SpiderNet anchors
+        latent communication modules to both intercellular signaling and intracellular transcriptional programs.
       </p>
       <p>
-        By jointly modeling ligand-receptor co-expression and gene expression across ordered cell pairs, SpiderNet anchors latent
-        communication modules to both intercellular signaling and intracellular transcriptional programs. This yields a compact,
-        reusable, and biologically interpretable basis of tissue communication, enabling cross-context communication program comparison,
-        <em>in silico</em> perturbational interrogation of neighboring-cell effects, and detection of multi-hop communication cascades
-        across cell chains.
-      </p>
-      <p>
-        Validated across simulations and diverse real spatial transcriptomics datasets spanning aging brain, cancer, and perturbational
-        settings, SpiderNet provides a general framework for comparing, perturbing, and tracing multicellular regulatory architecture
-        <em>in situ</em> across tissue contexts.
+        The result is a compact, reusable, biologically interpretable basis for tissue communication —
+        supporting cross-context comparison, <em>in&nbsp;silico</em> perturbation, and detection of
+        multi-hop cascades across cell chains.
       </p>
     </div>
-
     <div class="col-lg-5">
-      <div class="card shadow-sm">
-        <div class="card-body p-3">
-          <a href="{{ url_for('static', filename='SpiderNet_figure_1_v6.pdf') }}" target="_blank">
-            <img src="{{ url_for('static', filename='spidernet_method_hq.png') }}"
-                 alt="SpiderNet Method Overview"
-                 class="img-fluid rounded method-figure"
-                 style="width: 100%; height: auto; cursor: pointer;">
-          </a>
-          <p class="text-muted text-center mt-2 mb-0 small">
-            <i class="fas fa-info-circle me-1"></i>
-            Click to view high-resolution PDF
+      <p class="text-muted" style="font-size: var(--text-sm);">
+        Validated across simulations and diverse spatial transcriptomics datasets — aging brain, cancer,
+        and perturbational settings — SpiderNet provides a general framework for comparing, perturbing, and
+        tracing multicellular regulatory architecture <em>in&nbsp;situ</em>.
+      </p>
+    </div>
+  </section>
+
+  {# -- Modules --------------------------------------------------------- #}
+  <section class="mb-5" id="modules" aria-labelledby="modules-h">
+    <p class="eyebrow">Interactive analysis</p>
+    <h2 class="section-heading" id="modules-h">Four modules, <em>one workflow</em></h2>
+
+    <div class="row g-3 fx-rise">
+      <div class="col-md-6 col-lg-3">
+        <a href="#datasets" class="module-poster" id="basic-card">
+          <span class="module-poster__numeral" aria-hidden="true">1</span>
+          <span class="module-poster__tag">Module 01</span>
+          <h3 class="module-poster__title">Basic analysis</h3>
+          <p class="module-poster__body">
+            <em>In situ</em> MI visualization, top LR / sender / receiver loadings per MI, and pathway and cell-type-pair enrichment.
           </p>
-        </div>
+          <span class="module-poster__cta">Pick a dataset</span>
+        </a>
       </div>
-    </div>
-  </div>
-
-  <!-- Four Interactive Modules -->
-  <div class="row mb-5" id="modules-section">
-    <div class="col-12">
-      <h2 class="h3 mb-4">
-        <i class="fas fa-flask me-2 text-primary"></i>
-        Interactive Analysis Modules
-      </h2>
-    </div>
-
-    <div class="col-md-6 col-lg-3 mb-3" id="basic-card">
-      <div class="card h-100 border-primary">
-        <div class="card-header text-white" style="background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));">
-          <h6 class="card-title mb-0"><i class="fas fa-chart-line me-2"></i>Basic Analysis</h6>
-        </div>
-        <div class="card-body">
-          <p class="card-text small mb-0">
-            In-situ MI visualization, top LR / sender / receiver loadings per MI, and pathway / cell-type-pair enrichment.
-          </p>
-        </div>
-      </div>
-    </div>
-
-    <div class="col-md-6 col-lg-3 mb-3" id="subtype-card">
-      <div class="card h-100 border-primary">
-        <div class="card-header text-white" style="background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));">
-          <h6 class="card-title mb-0"><i class="fas fa-microscope me-2"></i>Subtype Discovery</h6>
-        </div>
-        <div class="card-body">
-          <p class="card-text small mb-0">
+      <div class="col-md-6 col-lg-3">
+        <a href="#datasets" class="module-poster" id="subtype-card">
+          <span class="module-poster__numeral" aria-hidden="true">2</span>
+          <span class="module-poster__tag">Module 02</span>
+          <h3 class="module-poster__title">Subtype discovery</h3>
+          <p class="module-poster__body">
             MI-guided clustering of one cell type with UMAP, DEGs, and GO / KEGG enrichment per subcluster.
           </p>
-        </div>
+          <span class="module-poster__cta">Pick a dataset</span>
+        </a>
       </div>
-    </div>
-
-    <div class="col-md-6 col-lg-3 mb-3" id="cascade-card">
-      <div class="card h-100 border-primary">
-        <div class="card-header text-white" style="background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));">
-          <h6 class="card-title mb-0"><i class="fas fa-sitemap me-2"></i>MI Cascade</h6>
-        </div>
-        <div class="card-body">
-          <p class="card-text small mb-0">
+      <div class="col-md-6 col-lg-3">
+        <a href="#datasets" class="module-poster" id="cascade-card">
+          <span class="module-poster__numeral" aria-hidden="true">3</span>
+          <span class="module-poster__tag">Module 03</span>
+          <h3 class="module-poster__title">MI cascade</h3>
+          <p class="module-poster__body">
             Significant MI cascade pairs, cell-type triplets, in-situ rendering, and DEG / GO at each cascade position.
           </p>
-        </div>
+          <span class="module-poster__cta">Pick a dataset</span>
+        </a>
       </div>
-    </div>
-
-    <div class="col-md-6 col-lg-3 mb-3" id="perturb-card">
-      <div class="card h-100 border-primary">
-        <div class="card-header text-white" style="background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));">
-          <h6 class="card-title mb-0"><i class="fas fa-bolt me-2"></i>Spatial Perturbation</h6>
-        </div>
-        <div class="card-body">
-          <p class="card-text small mb-0">
-            In-silico gene knockdown or cell-type replacement, paired DEG vs. baseline, and GO / KEGG enrichment.
+      <div class="col-md-6 col-lg-3">
+        <a href="#datasets" class="module-poster" id="perturb-card">
+          <span class="module-poster__numeral" aria-hidden="true">4</span>
+          <span class="module-poster__tag">Module 04</span>
+          <h3 class="module-poster__title">Spatial perturbation</h3>
+          <p class="module-poster__body">
+            <em>In silico</em> gene knockdown or cell-type replacement, paired DEG vs. baseline, GO / KEGG enrichment.
           </p>
-        </div>
+          <span class="module-poster__cta">Pick a dataset</span>
+        </a>
       </div>
     </div>
-  </div>
+  </section>
 
-  <!-- Available Datasets -->
+  {# -- Datasets -------------------------------------------------------- #}
   {% if datasets %}
-  <div class="row mb-4">
-    <div class="col-12">
-      <hr class="my-5">
-      <h2 class="h3 mb-4">
-        <i class="fas fa-database me-2 text-primary"></i>
-        Available Datasets
-        <span class="badge bg-primary ms-2">{{ datasets|length }}</span>
-      </h2>
-      <p class="text-muted mb-4">Select a dataset and a module.</p>
-    </div>
-  </div>
+  <section class="mb-5" id="datasets" aria-labelledby="datasets-h">
+    <p class="eyebrow">{{ datasets|length }} dataset{{ 's' if datasets|length != 1 else '' }} discovered</p>
+    <h2 class="section-heading" id="datasets-h">Available <em>datasets</em></h2>
 
-  <div class="row g-4">
-    {% for name, info in datasets.items() %}
-    <div class="col-md-6 col-lg-4">
-      <div class="card h-100 shadow-sm dataset-card border-0">
-        <div class="card-header text-white" style="background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));">
-          <h5 class="card-title mb-1"><i class="fas fa-folder-open me-2"></i>{{ name }}</h5>
-          <small class="opacity-75">
-            <i class="fas fa-cube me-1"></i>{{ info.run_dir.name }} · {{ info.version }}
-          </small>
-        </div>
-        <div class="card-body d-flex flex-column">
-          <p class="text-muted small mb-3">
-            <i class="fas fa-folder me-1"></i><code class="text-muted">{{ info.root.name }}</code>
+    <ol class="dataset-list fx-rise">
+      {% for name, info in datasets.items() %}
+      <li class="dataset-row">
+        <span class="dataset-row__num">{{ '%02d'|format(loop.index) }} ·</span>
+
+        <div>
+          <h3 class="dataset-row__name">{{ name }}</h3>
+          <p class="dataset-row__meta">
+            <span><code>{{ info.run_dir.name }}</code></span>
+            <span>dim {{ info.dim_envir }}</span>
+            <span>{{ info.version }}</span>
+            <span><code>{{ info.root.name }}</code></span>
           </p>
-          <div class="d-grid gap-2 mt-auto">
-            <a href="{{ url_for('module1_basic.page', dataset_name=name) }}" class="btn btn-outline-primary btn-sm">
-              <i class="fas fa-chart-line me-2"></i>Basic Analysis
-            </a>
-            <a href="{{ url_for('module2_subtype.page', dataset_name=name) }}" class="btn btn-outline-primary btn-sm">
-              <i class="fas fa-microscope me-2"></i>Subtype Discovery
-            </a>
-            <a href="{{ url_for('module3_cascade.page', dataset_name=name) }}" class="btn btn-outline-primary btn-sm">
-              <i class="fas fa-sitemap me-2"></i>MI Cascade
-            </a>
-            <a href="{{ url_for('module4_perturb.page', dataset_name=name) }}" class="btn btn-outline-primary btn-sm">
-              <i class="fas fa-bolt me-2"></i>Spatial Perturbation
-            </a>
-          </div>
         </div>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
+
+        <div class="dataset-row__actions">
+          <a href="{{ url_for('module1_basic.page', dataset_name=name) }}" class="dataset-row__chip">
+            <span class="dataset-row__chip-num">M1</span> Basic
+          </a>
+          <a href="{{ url_for('module2_subtype.page', dataset_name=name) }}" class="dataset-row__chip">
+            <span class="dataset-row__chip-num">M2</span> Subtype
+          </a>
+          <a href="{{ url_for('module3_cascade.page', dataset_name=name) }}" class="dataset-row__chip">
+            <span class="dataset-row__chip-num">M3</span> Cascade
+          </a>
+          <a href="{{ url_for('module4_perturb.page', dataset_name=name) }}" class="dataset-row__chip">
+            <span class="dataset-row__chip-num">M4</span> Perturb
+          </a>
+        </div>
+      </li>
+      {% endfor %}
+    </ol>
+  </section>
   {% else %}
-  <div class="row">
-    <div class="col-12">
-      <div class="alert alert-warning" role="alert">
-        <h4 class="alert-heading"><i class="fas fa-exclamation-triangle me-2"></i>No Datasets Found</h4>
-        <p>No SpiderNet <code>*_UI</code> dataset directories were found.</p>
-        <hr>
-        <p class="mb-0">
-          Search location: <code>{{ datasets and "" or "" }}Interactivetool/SpiderNet-interactive_V2/</code><br>
-          Each dataset must contain <code>ProcessedData/</code>, <code>&lt;VERSION&gt;/SpiderNet_Result_dim*/</code>,
-          and the <code>*_modeltraining_setup.json</code> + <code>config.json</code> + <code>run_dirs.json</code> files.
-        </p>
-      </div>
+  <section class="mb-5" id="datasets">
+    <div class="alert alert-warning" role="alert">
+      <h4 class="alert-heading">No datasets found</h4>
+      <p>No SpiderNet <code>*_UI</code> dataset directories were located.</p>
+      <p class="mb-0">
+        Each dataset must contain <code>ProcessedData/</code>,
+        <code>&lt;VERSION&gt;/SpiderNet_Result_dim*/</code>, and the
+        <code>*_modeltraining_setup.json</code>, <code>config.json</code>, and <code>run_dirs.json</code> files.
+      </p>
     </div>
-  </div>
+  </section>
   {% endif %}
 </div>
 {% endblock %}

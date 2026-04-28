@@ -8,6 +8,11 @@
   "use strict";
   const BASE = window.M3_BASE_URL;
   const $ = (id) => document.getElementById(id);
+  function currentTheme() {
+    var t = document.documentElement.getAttribute("data-theme");
+    if (t === "light" || t === "dark") return t;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
 
   // -- DOM refs -----------------------------------------------------------
   const runBtn = $("m3-run");
@@ -120,7 +125,7 @@
         nperm: parseInt($("m3-nperm").value, 10),
         fdr_alpha: parseFloat($("m3-fdr-alpha").value),
         force_recompute: $("m3-force").checked,
-        theme: "dark",
+        theme: currentTheme(),
       });
       const dt = ((performance.now() - t0) / 1000).toFixed(1);
       CURRENT_CACHE_KEY = data.cache_key;
@@ -153,7 +158,7 @@
     setStatus(`Loading triples for ${pairKey}...`);
     try {
       const data = await postJson("/api/stem", {
-        cache_key: CURRENT_CACHE_KEY, pair_key: pairKey, theme: "dark",
+        cache_key: CURRENT_CACHE_KEY, pair_key: pairKey, theme: currentTheme(),
       });
       renderFig(stemDiv, data.stem_figure);
       setStatus(`${pairKey} loaded.`);
@@ -229,7 +234,7 @@
         cell3_type: cell3Sel.value,
         slice_index: parseInt(sliceSel.value, 10),
         mi_threshold: parseFloat(insituMiThr.value),
-        theme: "dark",
+        theme: currentTheme(),
       });
       const dt = ((performance.now() - t0) / 1000).toFixed(1);
       renderFig(insituDiv, data.figure);
@@ -268,7 +273,7 @@
         lfc_thresh: parseFloat(degLfc.value),
         padj_thresh: parseFloat(degPadj.value),
         gene_direction: degDirection.value,
-        theme: "dark",
+        theme: currentTheme(),
       });
       const dt = ((performance.now() - t0) / 1000).toFixed(1);
       ["1", "2", "3"].forEach((pos) => {
@@ -298,5 +303,10 @@
   degRunBtn.addEventListener("click", runDegGo);
   stemTopn.addEventListener("change", () => {
     if (CURRENT_PAIR_KEY) loadStem(CURRENT_PAIR_KEY);
+  });
+
+  // Re-render server-themed Plotly figures when the user toggles theme.
+  window.addEventListener("spn:themechange", () => {
+    if (CURRENT_CACHE_KEY) runAnalysis();
   });
 })();

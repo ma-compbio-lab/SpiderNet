@@ -4,6 +4,11 @@
 
   const BASE = window.M2_BASE_URL;
   const $ = (id) => document.getElementById(id);
+  function currentTheme() {
+    var t = document.documentElement.getAttribute("data-theme");
+    if (t === "light" || t === "dark") return t;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
 
   const cellSel = $("m2-cell-type");
   const miThr = $("m2-mi-threshold");
@@ -105,7 +110,7 @@
         louvain_resolution: parseFloat(louvainRes.value),
         umap_min_dist: parseFloat(umapMinDist.value),
         random_state: parseInt(randomState.value, 10),
-        theme: "dark",
+        theme: currentTheme(),
       });
       const dt = ((performance.now() - t0) / 1000).toFixed(1);
       const s = data.summary;
@@ -184,7 +189,7 @@
           direction: degDirection.value,
           lfc_thresh: parseFloat(degLfc.value),
           padj_thresh: parseFloat(degPadj.value),
-          theme: "dark",
+          theme: currentTheme(),
         }),
       });
       if (!r.ok) {
@@ -228,4 +233,9 @@
       setStatus(`Init failed: ${err.message}`);
     }
   })();
+
+  // Re-render server-themed Plotly figures when the user toggles theme.
+  window.addEventListener("spn:themechange", () => {
+    if (CURRENT_CACHE_KEY) runAnalysis();
+  });
 })();

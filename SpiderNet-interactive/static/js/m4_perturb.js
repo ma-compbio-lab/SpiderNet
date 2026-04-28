@@ -61,6 +61,12 @@
   let REFRESH_TIMER = null;
   let FETCHED_FEATURES_FOR_MI = null;
 
+  function currentTheme() {
+    var t = document.documentElement.getAttribute("data-theme");
+    if (t === "light" || t === "dark") return t;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+
   // -- helpers -----------------------------------------------------------
   function setMode(mode) {
     root.classList.toggle("m4-mode-knockout", mode === "knockout");
@@ -161,7 +167,7 @@
     featureSpinner.classList.add("active");
     try {
       const data = await postJson("/api/feature-tables", {
-        mi_name: miName, top_n: topN, theme: "dark",
+        mi_name: miName, top_n: topN, theme: currentTheme(),
       });
       LR_ROWS = data.lr_rows || [];
       SENDER_ROWS = data.sender_rows || [];
@@ -195,7 +201,7 @@
       padj_threshold: parseFloat(padjInput.value) || 0,
       enrich_direction: directionSel.value,
       enrich_scope: scopeSel.value,
-      theme: "dark",
+      theme: currentTheme(),
     };
     if (mode === "knockout") {
       payload.mi_name = miSel.value;
@@ -298,7 +304,7 @@
         padj_threshold: parseFloat(padjInput.value) || 0,
         enrich_direction: directionSel.value,
         enrich_scope: scopeSel.value,
-        theme: "dark",
+        theme: currentTheme(),
       });
       applyRunResponse(data);
     } catch (e) {
@@ -362,6 +368,12 @@
 
   [lfcInput, padjInput, directionSel, scopeSel].forEach((el) => {
     el.addEventListener("change", scheduleRefresh);
+  });
+
+  // Re-render server-themed Plotly figures when the user toggles theme.
+  window.addEventListener("spn:themechange", () => {
+    loadFeatureTables();
+    if (CURRENT_CACHE_KEY) refreshFromCache();
   });
 
   // -- go ----------------------------------------------------------------

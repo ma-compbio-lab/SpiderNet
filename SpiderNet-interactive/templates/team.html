@@ -1,157 +1,65 @@
 {% extends "base.html" %}
 
-{% block title %}Team - {{ app_title }}{% endblock %}
+{% block title %}Team — {{ app_title }}{% endblock %}
 
 {% block content %}
-<div class="container">
-    <!-- Page Header -->
-    <div class="row mb-5">
-        <div class="col-12">
-            <h1 class="display-5 mb-3">
-                <i class="fas fa-users text-primary me-2"></i>
-                Team
-            </h1>
-            <p class="lead text-muted">
-                Meet the researchers and developers behind SpiderNet
+<div class="container" style="max-width: 940px;">
+
+    <header class="hero" style="border-bottom: 1px solid var(--border); margin-bottom: var(--space-2xl);">
+        <p class="eyebrow">Team</p>
+        <h1 class="hero__title" style="max-width: 22ch;">
+            The researchers behind <em>SpiderNet</em>
+        </h1>
+    </header>
+
+    <section class="team-section fx-rise" aria-labelledby="team-pi">
+        <p class="eyebrow">Principal Investigator</p>
+        <div class="pi-card">
+            <h2 class="pi-card__name" id="team-pi">Jian Ma, Ph.D.</h2>
+            <p class="pi-card__role">Ray and Stephanie Lane Professor</p>
+            <p class="pi-card__affil">
+                Computational Biology Department<br>
+                School of Computer Science, Carnegie Mellon University
             </p>
-        </div>
-    </div>
-
-    <!-- Core Team Section -->
-    <div class="row mb-5">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header" style="background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));">
-                    <h3 class="mb-0 text-white">
-                        <i class="fas fa-code me-2"></i>
-                        Core Development Team
-                    </h3>
-                </div>
-                <div class="card-body p-4">
-                    <div class="row g-4">
-                        <!-- Team Member 1 -->
-                        <div class="col-md-6 col-lg-3">
-                            <div class="text-center h-100 p-3 border rounded">
-                                <div class="mb-3">
-                                    <img src="https://www.cs.cmu.edu/~jianma/img/junjie.jpg"
-                                         alt="Junjie Tang"
-                                         class="img-fluid rounded-circle"
-                                         style="width: 150px; height: 150px; object-fit: cover; border: 3px solid var(--primary-color);">
-                                </div>
-                                <h4 class="mb-2">Junjie Tang</h4>
-                                <p class="text-muted mb-0">Postdoctoral Researcher</p>
-                            </div>
-                        </div>
-
-                        <!-- Team Member 2 -->
-                        <div class="col-md-6 col-lg-3">
-                            <div class="text-center h-100 p-3 border rounded">
-                                <div class="mb-3">
-                                    <img src="https://www.cs.cmu.edu/~jianma/img/shaoheng.jpg"
-                                         alt="Shaoheng Liang"
-                                         class="img-fluid rounded-circle"
-                                         style="width: 150px; height: 150px; object-fit: cover; border: 3px solid var(--primary-color);">
-                                </div>
-                                <h4 class="mb-2">Shaoheng Liang</h4>
-                                <p class="text-muted mb-0">Lane Fellow</p>
-                            </div>
-                        </div>
-
-                        <!-- Team Member 3 -->
-                        <div class="col-md-6 col-lg-3">
-                            <div class="text-center h-100 p-3 border rounded">
-                                <div class="mb-3">
-                                    <img src="https://www.cs.cmu.edu/~jianma/img/shahul2.jpg"
-                                         alt="Shahul Alam"
-                                         class="img-fluid rounded-circle"
-                                         style="width: 150px; height: 150px; object-fit: cover; border: 3px solid var(--primary-color);">
-                                </div>
-                                <h4 class="mb-2">Shahul Alam</h4>
-                                <p class="text-muted mb-0">PhD Student</p>
-                            </div>
-                        </div>
-
-                        <!-- Team Member 4 -->
-                        <div class="col-md-6 col-lg-3">
-                            <div class="text-center h-100 p-3 border rounded">
-                                <div class="mb-3">
-                                    <img src="https://www.cs.cmu.edu/~jianma/img/wenduo.jpg"
-                                         alt="Wenduo Cheng"
-                                         class="img-fluid rounded-circle"
-                                         style="width: 150px; height: 150px; object-fit: cover; border: 3px solid var(--primary-color);">
-                                </div>
-                                <h4 class="mb-2">Wenduo Cheng</h4>
-                                <p class="text-muted mb-0">PhD Student</p>
-                            </div>
-                        </div>
-
-                        <!-- Team Member 5 -->
-                        <div class="col-md-6 col-lg-3">
-                            <div class="text-center h-100 p-3 border rounded">
-                                <div class="mb-3">
-                                    <img src="https://www.cs.cmu.edu/~jianma/img/yangzhang2.jpg"
-                                         alt="Yang Zhang"
-                                         class="img-fluid rounded-circle"
-                                         style="width: 150px; height: 150px; object-fit: cover; border: 3px solid var(--primary-color);">
-                                </div>
-                                <h4 class="mb-2">Yang Zhang</h4>
-                                <p class="text-muted mb-0">Project Scientist</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Principal Investigator Section -->
-    <div class="row mb-5">
-        <div class="col-12">
-            <div class="card">
-                <div class="card-header" style="background: linear-gradient(135deg, var(--secondary-color), var(--accent-color));">
-                    <h3 class="mb-0 text-white">
-                        <i class="fas fa-user-tie me-2"></i>
-                        Principal Investigator
-                    </h3>
-                </div>
-                <div class="card-body p-5">
-                    <div class="row align-items-center">
-                        <div class="col-md-3 text-center mb-4 mb-md-0">
-                            <img src="https://www.cs.cmu.edu/~jianma/img/jianma2.jpg"
-                                 alt="Jian Ma"
-                                 class="img-fluid rounded-circle"
-                                 style="width: 200px; height: 200px; object-fit: cover; border: 4px solid var(--secondary-color); box-shadow: 0 4px 12px rgba(0,0,0,0.15);">
-                        </div>
-                        <div class="col-md-9">
-                            <h2 class="mb-3">Jian Ma, Ph.D.</h2>
-                            <h5 class="text-primary mb-3">Principal Investigator</h5>
-                            <p class="mb-2">
-                                <strong>Ray and Stephanie Lane Professor</strong>
-                            </p>
-                            <p class="mb-2">
-                                Computational Biology Department<br>
-                                School of Computer Science<br>
-                                Carnegie Mellon University
-                            </p>
-                            <div class="mt-4">
-                                <a href="https://www.cs.cmu.edu/~jianma/" target="_blank" class="btn btn-outline-primary">
-                                    <i class="fas fa-globe me-1"></i> Lab Website
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Back to Home -->
-    <div class="row mb-5">
-        <div class="col-12 text-center">
-            <a href="{{ url_for('index') }}" class="btn btn-lg btn-primary">
-                <i class="fas fa-home me-2"></i> Back to Home
+            <a href="https://www.cs.cmu.edu/~jianma/" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">
+                Lab website <i class="fas fa-arrow-up-right-from-square ms-1" aria-hidden="true"></i>
             </a>
         </div>
-    </div>
+    </section>
+
+    <section class="team-section" aria-labelledby="team-core">
+        <p class="eyebrow">Core development</p>
+        <h2 class="section-heading" id="team-core" style="font-size: var(--text-2xl);">
+            Researchers <em>&amp;</em> engineers
+        </h2>
+        <ul class="team-list fx-rise">
+            <li class="team-list__item">
+                <span class="team-list__name">Junjie Tang</span>
+                <span class="team-list__role">Postdoctoral Researcher</span>
+            </li>
+            <li class="team-list__item">
+                <span class="team-list__name">Shaoheng Liang</span>
+                <span class="team-list__role">Lane Fellow</span>
+            </li>
+            <li class="team-list__item">
+                <span class="team-list__name">Shahul Alam</span>
+                <span class="team-list__role">PhD Student</span>
+            </li>
+            <li class="team-list__item">
+                <span class="team-list__name">Wenduo Cheng</span>
+                <span class="team-list__role">PhD Student</span>
+            </li>
+            <li class="team-list__item">
+                <span class="team-list__name">Yang Zhang</span>
+                <span class="team-list__role">Project Scientist</span>
+            </li>
+        </ul>
+    </section>
+
+    <p class="mt-4">
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1" aria-hidden="true"></i> Back to home
+        </a>
+    </p>
 </div>
 {% endblock %}

@@ -7,12 +7,15 @@
 <style>
   .m2-controls label { font-weight: 500; margin-bottom: 0.15rem; }
   #m2-umap, #m2-cluster-size, #m2-sender-heatmap, #m2-receiver-heatmap {
-    background: #000; border-radius: 6px; min-height: 320px;
+    background: var(--plot-bg); border-radius: var(--radius-sm);
+    border: 1px solid var(--border); min-height: 320px;
   }
   .m2-spinner-overlay {
     position: absolute; inset: 0; display: none;
     align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.45); color: #fff; border-radius: 6px;
+    background: color-mix(in oklab, var(--bg) 65%, transparent);
+    color: var(--fg); border-radius: var(--radius-sm);
+    backdrop-filter: blur(2px);
   }
   .m2-spinner-overlay.active { display: flex; }
 </style>
@@ -28,12 +31,10 @@
     </ol>
   </nav>
 
-  <div class="d-flex align-items-baseline mb-3">
-    <h1 class="h3 mb-0 me-3">
-      <i class="fas fa-microscope text-primary me-2"></i>{{ module_title }}
-    </h1>
-    <span class="text-muted">{{ dataset_name }}</span>
-  </div>
+  <header class="module-header">
+    <h1>{{ module_title }}</h1>
+    <span class="module-meta">{{ dataset_name }}</span>
+  </header>
 
   <div class="row g-3">
     <!-- Left: controls -->

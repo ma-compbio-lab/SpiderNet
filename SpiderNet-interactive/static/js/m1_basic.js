@@ -13,6 +13,11 @@
   let CURRENT_THRESHOLD = null;
 
   const $ = (id) => document.getElementById(id);
+  function currentTheme() {
+    var t = document.documentElement.getAttribute("data-theme");
+    if (t === "light" || t === "dark") return t;
+    return window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
   const sliceSel = $("m1-slice");
   const miSel = $("m1-mi");
   const thrInput = $("m1-threshold");
@@ -102,7 +107,7 @@
     const r = await fetch(`${BASE}/api/loadings`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ mi_idx: miIdx, top_n: topN, theme: "dark" }),
+      body: JSON.stringify({ mi_idx: miIdx, top_n: topN, theme: currentTheme() }),
     });
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
@@ -152,7 +157,7 @@
     enrichStatus.textContent = "Computing — this may take ~30–60 s on first run...";
     try {
       const t0 = performance.now();
-      const r = await fetch(`${BASE}/api/enrichment?theme=dark`);
+      const r = await fetch(`${BASE}/api/enrichment?theme=${currentTheme()}`);
       if (!r.ok) {
         const err = await r.json().catch(() => ({}));
         throw new Error(err.error || `enrichment ${r.status}`);
@@ -212,7 +217,7 @@
         marker_size: parseFloat(markerSize.value),
         edge_width: parseFloat(edgeWidth.value),
         arrow_size: parseFloat(arrowSize.value),
-        theme: "dark",
+        theme: currentTheme(),
       };
       const t0 = performance.now();
       const result = await fetchSpatial(payload);
@@ -288,4 +293,10 @@
       setStatus(`Init failed: ${err.message}`);
     }
   })();
+
+  // Re-render server-themed Plotly figures when the user toggles theme.
+  window.addEventListener("spn:themechange", () => {
+    refreshLoadings();
+    if (enrichmentLoaded) loadEnrichment();
+  });
 })();
