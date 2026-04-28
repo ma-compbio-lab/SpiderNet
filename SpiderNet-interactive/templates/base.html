@@ -33,41 +33,49 @@
                 <ul class="navbar-nav me-auto">
                     {% if dataset_name %}
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'basic_analysis' %}active{% endif %}"
-                           href="{{ url_for('basic_analysis', dataset_name=dataset_name) }}">
-                            <i class="fas fa-chart-line me-1"></i> Basic Analysis
+                        <a class="nav-link {% if request.endpoint == 'module1_basic.page' %}active{% endif %}"
+                           href="{{ url_for('module1_basic.page', dataset_name=dataset_name) }}">
+                            <i class="fas fa-chart-line me-1"></i> Basic
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'subtype_analysis' %}active{% endif %}"
-                           href="{{ url_for('subtype_analysis', dataset_name=dataset_name) }}">
-                            <i class="fas fa-microscope me-1"></i> Subtype Analysis
+                        <a class="nav-link {% if request.endpoint == 'module2_subtype.page' %}active{% endif %}"
+                           href="{{ url_for('module2_subtype.page', dataset_name=dataset_name) }}">
+                            <i class="fas fa-microscope me-1"></i> Subtype
                         </a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link {% if request.endpoint == 'cascade_analysis' %}active{% endif %}"
-                           href="{{ url_for('cascade_analysis', dataset_name=dataset_name) }}">
-                            <i class="fas fa-sitemap me-1"></i> MI Cascade
+                        <a class="nav-link {% if request.endpoint == 'module3_cascade.page' %}active{% endif %}"
+                           href="{{ url_for('module3_cascade.page', dataset_name=dataset_name) }}">
+                            <i class="fas fa-sitemap me-1"></i> Cascade
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'module4_perturb.page' %}active{% endif %}"
+                           href="{{ url_for('module4_perturb.page', dataset_name=dataset_name) }}">
+                            <i class="fas fa-bolt me-1"></i> Perturbation
                         </a>
                     </li>
                     {% endif %}
                 </ul>
 
                 <ul class="navbar-nav ms-auto">
-                    <!-- Analyses navigation - works from any page -->
                     <li class="nav-item dropdown">
                         <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown">
-                            <i class="fas fa-flask me-1"></i> Analyses
+                            <i class="fas fa-flask me-1"></i> Modules
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('index') }}#basic-card">
                                 <i class="fas fa-chart-line me-2"></i> Basic Analysis
                             </a></li>
                             <li><a class="dropdown-item" href="{{ url_for('index') }}#subtype-card">
-                                <i class="fas fa-microscope me-2"></i> Subtype Analysis
+                                <i class="fas fa-microscope me-2"></i> Subtype Discovery
                             </a></li>
                             <li><a class="dropdown-item" href="{{ url_for('index') }}#cascade-card">
                                 <i class="fas fa-sitemap me-2"></i> MI Cascade
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('index') }}#perturb-card">
+                                <i class="fas fa-bolt me-2"></i> Spatial Perturbation
                             </a></li>
                         </ul>
                     </li>
@@ -78,7 +86,7 @@
                         <ul class="dropdown-menu">
                             {% if datasets %}
                             {% for name, info in datasets.items() %}
-                            <li><a class="dropdown-item" href="{{ url_for('basic_analysis', dataset_name=name) }}">
+                            <li><a class="dropdown-item" href="{{ url_for('module1_basic.page', dataset_name=name) }}">
                                 <i class="fas fa-folder me-2"></i> {{ name }}
                             </a></li>
                             {% endfor %}

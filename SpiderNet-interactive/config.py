@@ -1,23 +1,15 @@
 """
-Configuration settings for SpiderNet Results Viewer
+Configuration settings for SpiderNet-Interactive.
+
+The app discovers datasets in the V2 *_UI layout under SEARCH_ROOT.
 """
 from pathlib import Path
 
-# Root directory for SpiderNet project (parent of SpiderNet-interactive/)
-# This assumes the app is in SpiderNet/SpiderNet-interactive/
+# Project root (parent of SpiderNet-interactive/)
 SPIDERNET_ROOT = Path(__file__).parent.parent.resolve()
 
-# Directories to search for results
-SEARCH_DIRS = [
-    SPIDERNET_ROOT / "Interactivetool",
-    SPIDERNET_ROOT / "SpiderNet" / "Results",
-]
-
-# Pattern to identify SpiderNet result directories
-RESULT_DIR_PATTERN = "SpiderNet_Result_dim*"
-
-# Supported image formats
-IMAGE_FORMATS = ['.png', '.pdf']
+# Where to look for <Name>_UI/ dataset directories
+SEARCH_ROOT = SPIDERNET_ROOT / "Interactivetool" / "SpiderNet-interactive_V2"
 
 # Default port
 PORT = 8000

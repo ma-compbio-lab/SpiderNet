@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+
+{% block title %}{{ module_title }} — {{ dataset_name }} — {{ app_title }}{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  .m4-controls label { font-weight: 500; margin-bottom: 0.15rem; }
+  #m4-volcano, #m4-go, #m4-kegg,
+  #m4-lr-stem, #m4-sender-stem, #m4-receiver-stem {
+    background: #000; border-radius: 6px;
+  }
+  #m4-volcano { min-height: 560px; }
+  #m4-go, #m4-kegg { min-height: 320px; }
+  #m4-lr-stem, #m4-sender-stem, #m4-receiver-stem { min-height: 280px; }
+
+  .m4-feature-table tbody tr { cursor: pointer; }
+  .m4-feature-table tbody tr.selected { background: rgba(0, 247, 255, 0.18); }
+  .m4-feature-table-wrap { max-height: 280px; overflow-y: auto; }
+  .m4-de-table-wrap { max-height: 540px; overflow-y: auto; }
+
+  .m4-spinner-overlay {
+    position: absolute; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.45); color: #fff; border-radius: 6px;
+    z-index: 10;
+  }
+  .m4-spinner-overlay.active { display: flex; }
+
+  .m4-mode-knockout .m4-replacement-only,
+  .m4-mode-replacement .m4-knockout-only { display: none; }
+
+  .m4-multiselect { min-height: 6rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Datasets</a></li>
+      <li class="breadcrumb-item">{{ dataset_name }}</li>
+      <li class="breadcrumb-item active" aria-current="page">{{ module_title }}</li>
+    </ol>
+  </nav>
+
+  <div class="d-flex align-items-baseline mb-3">
+    <h1 class="h3 mb-0 me-3">
+      <i class="fas fa-bolt text-primary me-2"></i>{{ module_title }}
+    </h1>
+    <span class="text-muted">{{ dataset_name }} · {{ dataset.run_dir.name }}{% if species %} · {{ species }}{% endif %}</span>
+  </div>
+
+  <div id="m4-root" class="m4-mode-knockout">
+    <div class="row g-3">
+      <!-- Left: controls -->
+      <div class="col-lg-3 m4-controls">
+        <div class="card">
+          <div class="card-body">
+            <h2 class="h6 mb-2"><i class="fas fa-sliders-h me-1"></i>Run controls</h2>
+
+            <label class="small">Perturbation mode</label>
+            <div class="form-check small">
+              <input class="form-check-input" type="radio" name="m4-mode" id="m4-mode-knockout" value="knockout" checked>
+              <label class="form-check-label" for="m4-mode-knockout">Gene knockout</label>
+            </div>
+            <div class="form-check small mb-2">
+              <input class="form-check-input" type="radio" name="m4-mode" id="m4-mode-replacement" value="replacement">
+              <label class="form-check-label" for="m4-mode-replacement">Cell-type replacement</label>
+            </div>
+
+            <!-- Knockout-only -->
+            <div class="m4-knockout-only">
+              <label for="m4-mi" class="small">MI dimension</label>
+              <select id="m4-mi" class="form-select form-select-sm mb-2">
+                {% for mi in mi_list %}
+                <option value="{{ mi }}"{% if loop.first %} selected{% endif %}>{{ mi }}</option>
+                {% endfor %}
+              </select>
+
+              <label for="m4-topn" class="small">Top features shown</label>
+              <input type="number" id="m4-topn" class="form-control form-control-sm mb-2"
+                     value="10" min="5" max="20" step="1">
+
+              <label for="m4-keep-pct" class="small">Keep expression at (%)</label>
+              <input type="number" id="m4-keep-pct" class="form-control form-control-sm mb-2"
+                     value="50" min="0" max="100" step="5">
+
+              <label class="small">Sender cell types</label>
+              <select id="m4-sender-types" class="form-select form-select-sm m4-multiselect mb-2" multiple></select>
+
+              <label class="small">Receiver cell types</label>
+              <select id="m4-receiver-types" class="form-select form-select-sm m4-multiselect mb-2" multiple></select>
+              <p class="text-muted small mb-2">
+                Empty = all sender / receiver cell types. Hold ⌘ / Ctrl to multi-select.
+              </p>
+            </div>
+
+            <!-- Replacement-only -->
+            <div class="m4-replacement-only">
+              <label class="small">Replacement cell type(s)</label>
+              <select id="m4-replacement-types" class="form-select form-select-sm m4-multiselect mb-2" multiple></select>
+
+              <label class="small">Cell types to be replaced</label>
+              <select id="m4-replaced-types" class="form-select form-select-sm m4-multiselect mb-2" multiple></select>
+
+              <label for="m4-seed" class="small">Random seed</label>
+              <input type="number" id="m4-seed" class="form-control form-control-sm mb-2" value="0" step="1">
+            </div>
+
+            <hr>
+            <label class="small">Comparison cell type(s)</label>
+            <select id="m4-target-types" class="form-select form-select-sm m4-multiselect mb-2" multiple></select>
+            <p class="text-muted small mb-2">
+              <span class="m4-knockout-only">Cell types whose predicted expression we compare before vs. after knockout.</span>
+              <span class="m4-replacement-only">Neighboring cell types of replaced cells, used for the comparison.</span>
+            </p>
+
+            <label for="m4-max-cells" class="small">Max cells used for DE</label>
+            <input type="number" id="m4-max-cells" class="form-control form-control-sm mb-2"
+                   value="8000" min="0" step="500">
+
+            <hr>
+            <h2 class="h6 mb-2"><i class="fas fa-filter me-1"></i>DE thresholds</h2>
+            <div class="row g-2">
+              <div class="col-6">
+                <label for="m4-lfc" class="small">|log2FC| ≥</label>
+                <input type="number" id="m4-lfc" class="form-control form-control-sm" value="0.25" min="0" step="0.05">
+              </div>
+              <div class="col-6">
+                <label for="m4-padj" class="small">adj P &lt;</label>
+                <input type="number" id="m4-padj" class="form-control form-control-sm" value="0.05" min="0" max="1" step="0.001">
+              </div>
+            </div>
+
+            <label for="m4-direction" class="small mt-2">Enrichment direction</label>
+            <select id="m4-direction" class="form-select form-select-sm">
+              <option value="up" selected>Upregulated</option>
+              <option value="down">Downregulated</option>
+            </select>
+
+            <label for="m4-scope" class="small mt-2">Enrichment scope</label>
+            <select id="m4-scope" class="form-select form-select-sm mb-2">
+              <option value="indirect_only" selected>Not directly perturbed only</option>
+              <option value="all_significant">All significant</option>
+            </select>
+
+            <hr>
+            <button id="m4-run" class="btn btn-primary btn-sm w-100" disabled>
+              <i class="fas fa-play me-1"></i>Run perturbation
+            </button>
+            <p class="text-muted small mt-2 mb-0" id="m4-run-hint">
+              Loading model & baseline cache before first run…
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right: results -->
+      <div class="col-lg-9 position-relative">
+        <!-- Feature overview (knockout only) -->
+        <div class="card mb-3 m4-knockout-only" id="m4-feature-card">
+          <div class="card-body position-relative">
+            <div class="d-flex justify-content-between mb-2">
+              <h2 class="h6 mb-0"><i class="fas fa-microscope me-1"></i>Selected MI feature overview</h2>
+              <span id="m4-feature-status" class="small text-muted"></span>
+            </div>
+            <p class="small text-muted mb-2">
+              Click rows to toggle which LR pairs / regulator genes / target genes participate in the knockout.
+            </p>
+            <div class="row g-3">
+              <div class="col-lg-4">
+                <div class="text-muted small">Top LR pairs</div>
+                <div id="m4-lr-stem"></div>
+                <div class="m4-feature-table-wrap mt-2">
+                  <table class="table table-sm table-hover m4-feature-table">
+                    <thead>
+                      <tr><th></th><th>#</th><th>LR pair</th><th class="text-end">load.</th></tr>
+                    </thead>
+                    <tbody id="m4-lr-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="col-lg-4">
+                <div class="text-muted small">Top regulator genes</div>
+                <div id="m4-sender-stem"></div>
+                <div class="m4-feature-table-wrap mt-2">
+                  <table class="table table-sm table-hover m4-feature-table">
+                    <thead>
+                      <tr><th></th><th>#</th><th>Gene</th><th class="text-end">load.</th></tr>
+                    </thead>
+                    <tbody id="m4-sender-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="col-lg-4">
+                <div class="text-muted small">Top target genes</div>
+                <div id="m4-receiver-stem"></div>
+                <div class="m4-feature-table-wrap mt-2">
+                  <table class="table table-sm table-hover m4-feature-table">
+                    <thead>
+                      <tr><th></th><th>#</th><th>Gene</th><th class="text-end">load.</th></tr>
+                    </thead>
+                    <tbody id="m4-receiver-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+            <div id="m4-feature-spinner" class="m4-spinner-overlay">
+              <div class="text-center">
+                <div class="spinner-border" role="status"></div>
+                <div class="small mt-2">Loading MI feature loadings…</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Run summary + volcano -->
+        <div class="row g-3">
+          <div class="col-lg-4">
+            <div class="card h-100">
+              <div class="card-body">
+                <h2 class="h6 mb-2"><i class="fas fa-clipboard-list me-1"></i>Run summary</h2>
+                <div id="m4-summary" class="small text-muted">No perturbation analysis has been run yet.</div>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-8">
+            <div class="card h-100 position-relative">
+              <div class="card-body">
+                <h2 class="h6 mb-2"><i class="fas fa-mountain me-1"></i>Predicted expression change</h2>
+                <div id="m4-volcano"></div>
+                <div id="m4-volcano-spinner" class="m4-spinner-overlay">
+                  <div class="text-center">
+                    <div class="spinner-border" role="status"></div>
+                    <div class="small mt-2">Re-running model on perturbed slices…</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- DE table + GO / KEGG -->
+        <div class="row g-3 mt-1">
+          <div class="col-lg-5">
+            <div class="card">
+              <div class="card-body">
+                <h2 class="h6 mb-2"><i class="fas fa-table me-1"></i>Per-gene DE table</h2>
+                <div class="m4-de-table-wrap">
+                  <table class="table table-sm table-hover">
+                    <thead>
+                      <tr>
+                        <th>Gene</th>
+                        <th class="text-end">mean_b</th>
+                        <th class="text-end">mean_a</th>
+                        <th class="text-end">log2FC</th>
+                        <th class="text-end">adj P</th>
+                        <th>role</th>
+                      </tr>
+                    </thead>
+                    <tbody id="m4-de-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="col-lg-7">
+            <div class="row g-3">
+              <div class="col-12">
+                <div class="card">
+                  <div class="card-body">
+                    <h2 class="h6 mb-2"><i class="fas fa-circle-nodes me-1"></i>GO Biological Process</h2>
+                    <div id="m4-go"></div>
+                  </div>
+                </div>
+              </div>
+              <div class="col-12">
+                <div class="card">
+                  <div class="card-body">
+                    <h2 class="h6 mb-2"><i class="fas fa-circle-nodes me-1"></i>KEGG pathways</h2>
+                    <div id="m4-kegg"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.M4_BASE_URL = {{ url_for("module4_perturb.api_run", dataset_name=dataset_name) | tojson }}.replace(/\/api\/run$/, "");
+</script>
+<script src="{{ url_for('static', filename='js/m4_perturb.js') }}"></script>
+{% endblock %}
