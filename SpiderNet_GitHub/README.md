@@ -243,37 +243,3 @@ If you use SpiderNet in your research, please cite the corresponding SpiderNet m
 ## License
 
 This project is distributed under the MIT License.
-
----
-
-## SpiderNet-Interactive: Web-Based Results Viewer
-
-SpiderNet includes **SpiderNet-Interactive**, a local web-based visualization tool for exploring analysis outputs. The viewer provides an intuitive interface to navigate through plots from Basic Analysis, Subtype Analysis, and MI Cascade Analysis.
-
-### Quick Start
-```bash
-cd SpiderNet/SpiderNet-interactive
-bash run.sh
-```
-
-Then open your browser to **http://localhost:8000**
-
-### Features
-- **Multi-Dataset Support**: Automatically discovers all SpiderNet result directories
-- **Three Analysis Modules**:
-  - **Basic Analysis**: MI correlation, LR loading pathway enrichment, cell-type pair associations
-  - **Subtype Analysis**: MI-guided clustering, functional states, clinical metadata integration
-  - **MI Cascade Analysis**: Multi-hop communication, spatial visualization, gene program analysis
-- **Advanced Search & Filtering**: Real-time search, category filtering, and sorting
-- **Interactive Exploration**: Click-to-enlarge modals, keyboard shortcuts, quick actions
-- **Local Server**: Runs on your machine, no internet required, accessible via browser
-- **Cross-Platform**: Works on macOS, Linux, and Windows
-
-### Results Location
-Place your SpiderNet analysis results (directories matching `SpiderNet_Result_dim*`) in either:
-- `./Interactivetool/`
-- `./SpiderNet/Results/`
-
-The viewer will automatically discover and categorize all PNG plots from your analysis notebooks.
-
-For more details, see [SpiderNet-interactive/README.md](SpiderNet-interactive/README.md).

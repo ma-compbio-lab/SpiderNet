@@ -1,0 +1,8 @@
+jupyter
+jupyterlab
+ipykernel
+ipython
+ipywidgets
+openpyxl
+plotly
+kaleido
