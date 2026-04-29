@@ -15,7 +15,10 @@ from .config import PathConfig, PreprocessConfig
 
 REQUIRED_PREPROCESSED_FILES = [
     "adata_all.h5ad",
+<<<<<<< HEAD
     "SpiderNet_data_pyg_list.pkl",
+=======
+>>>>>>> 21dee28 (Update SpiderNet package and tutorials)
     "metadata_sample.csv",
     "LR_list.pkl",
     "LR_list_cellchatdb.pkl",
@@ -26,6 +29,14 @@ REQUIRED_PREPROCESSED_FILES = [
     "adata_list.pkl",
 ]
 
+<<<<<<< HEAD
+=======
+REQUIRED_SPIDERNET_PYG_FILE_CANDIDATES = [
+    "SpiderNet_data_pyg_list.pkl",
+    "SpiderNet_data_pyg_list.pt",
+]
+
+>>>>>>> 21dee28 (Update SpiderNet package and tutorials)
 
 
 

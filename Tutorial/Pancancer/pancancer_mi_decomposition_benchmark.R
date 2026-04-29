@@ -419,6 +419,7 @@ MI_mean_df <- MI_mean_df[rownames(MI_hat),]
 MI_mean_df_entrie <- MI_mean_df
 MI_mean_df_entrie$Split <- NULL
 
+<<<<<<< HEAD
 ##Rowwise Spearman correlation
 corr_vec <- c()
 for (row_index in seq_len(nrow(MI_hat))) {
@@ -455,6 +456,45 @@ for (col_index in seq_len(ncol(MI_hat))) {
   }
 }
 summary(corr_vec_col)
+=======
+# ##Rowwise Spearman correlation
+# corr_vec <- c()
+# for (row_index in seq_len(nrow(MI_hat))) {
+#   mi_vec <- MI_hat[row_index, ]
+#   mi_mean_vec <- as.numeric(MI_mean_df_entrie[row_index, ])
+# 
+#   if (length(mi_vec) != length(mi_mean_vec)) {
+#     stop("Length mismatch between MI_hat row and MI_mean_df_entrie row.")
+#   }
+# 
+#   if (all(mi_vec == 0) || all(mi_mean_vec == 0)) {
+#     corr_vec[row_index] <- NA
+#   } else {
+#     corr_vec[row_index] <- cor(mi_vec, mi_mean_vec, method = "spearman")
+#   }
+# }
+# 
+# summary(corr_vec)
+# 
+# ##ColWisee Spearman correlation
+# corr_vec_col <- c()
+# for (col_index in seq_len(ncol(MI_hat))) {
+#   mi_vec <- MI_hat[, col_index]
+#   mi_mean_vec <- as.numeric(MI_mean_df_entrie[, col_index])
+#   
+#   if (length(mi_vec) != length(mi_mean_vec)) {
+#     stop("Length mismatch between MI_hat column and MI_mean_df_entrie column.")
+#   }
+#   
+#   if (all(mi_vec == 0) || all(mi_mean_vec == 0)) {
+#     corr_vec_col[col_index] <- NA
+#   } else {
+#     corr_vec_col[col_index] <- cor(mi_vec, mi_mean_vec, method = "spearman")
+#   }
+# }
+# summary(corr_vec_col)
+
+>>>>>>> 21dee28 (Update SpiderNet package and tutorials)
 
 MI_hat_flat <- as.vector(MI_hat)
 MI_mean_flat <- as.vector(as.matrix(MI_mean_df_entrie))

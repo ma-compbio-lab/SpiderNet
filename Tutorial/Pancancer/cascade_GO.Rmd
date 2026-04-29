@@ -1,0 +1,460 @@
+---
+title: "Pancancer cascade GO and CAF activity visualization"
+author: "Junjie Tang"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  warning = FALSE,
+  message = FALSE,
+  fig.align = "center"
+)
+```
+
+# Overview
+
+This R Markdown document generates a pancancer bubble plot that summarizes cascade-associated biological programs across cancer types.
+The figure combines two sources of information:
+
+1. **CAF activity**, measured from the CAF score differential analysis for the selected cascade comparison.
+2. **Representative GO biological programs**, selected from the GO enrichment summary and grouped into broad functional classes.
+
+The workflow is organized into the following steps:
+
+1. Define input paths, output paths, and plotting options.
+2. Load the CAF differential table and the GO enrichment summary table.
+3. Define representative GO terms and map them to functional classes.
+4. Convert all inputs into one shared plotting table.
+5. Apply a fixed cancer-type order and significance threshold.
+6. Generate and save the final pancancer bubble plot.
+
+By default, the notebook reproduces the original script behavior: the optional MI2 downstream activity block is prepared but not shown in the final plot. Set `include_mi2_downstream_activity <- TRUE` in the user settings section to include it.
+
+# 1. User settings
+
+Edit this section first when applying the notebook to a new result directory, cascade comparison, or output name.
+
+```{r user-settings}
+result_dir <- "D:/SpiderNet/Results/Pancancer/V1/SpiderNet_Result_dim11"
+
+# Input files generated from the Python cascade and GO analyses.
+go_summary_file <- file.path(result_dir, "GO_summary_for_R", "plot_df_long.csv")
+
+caf_activity_file <- file.path(
+  result_dir,
+  "CAFscore_pathway2_BothPos_vs_OnlyMIsecond_by_cancertype_Fibroblast-cancercell-cancercell.csv"
+)
+
+mi2_downstream_file <- file.path(
+  result_dir,
+  "LRStrength_pathway2_BothPos_vs_OnlyMIsecond_by_cancertype_Fibroblast-cancercell-cancercell.csv"
+)
+
+# The original script prepared this block but did not include it in the final plot.
+include_mi2_downstream_activity <- FALSE
+
+# Final output prefix. Both PDF and PNG files will be saved.
+output_prefix <- file.path(result_dir, "GO_MI2_CAF_singlepanel_final")
+
+# Plotting options.
+pvalue_cap <- 6
+adjusted_p_cutoff <- 0.05
+effect_size_cap <- 0.5
+
+# Fixed display order used in the pancancer figure.
+cancer_order <- rev(c(
+  "UterineCancer",
+  "ColonCancer",
+  "LungCancer",
+  "BreastCancer",
+  "OvarianCancer",
+  "MelanomaCancer",
+  "LiverCancer",
+  "ProstateCancer"
+))
+```
+
+# 2. Load packages
+
+```{r packages}
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(scales)
+  library(stringr)
+})
+```
+
+# 3. Helper functions
+
+These helper functions keep the main analysis sections concise and make the notebook easier to adapt.
+
+```{r helper-functions}
+check_file_exists <- function(path) {
+  if (!file.exists(path)) {
+    stop("Cannot find input file: ", path, call. = FALSE)
+  }
+  invisible(path)
+}
+
+check_required_columns <- function(df, required_cols, df_name = "input table") {
+  missing_cols <- setdiff(required_cols, colnames(df))
+  if (length(missing_cols) > 0) {
+    stop(
+      df_name,
+      " is missing required columns: ",
+      paste(missing_cols, collapse = ", "),
+      call. = FALSE
+    )
+  }
+  invisible(df)
+}
+
+safe_neglog10 <- function(x, cap = pvalue_cap) {
+  out <- suppressWarnings(-log10(as.numeric(x)))
+  out[is.infinite(out)] <- cap
+  pmin(out, cap)
+}
+
+strip_go_id <- function(x) {
+  gsub("\\s*\\(GO:\\d+\\)", "", x)
+}
+
+format_cancer_label <- function(x) {
+  out <- stringr::str_extract(x, "(?<=Human).*?(?=Patient)")
+  out[is.na(out) | out == ""] <- x[is.na(out) | out == ""]
+  out
+}
+
+read_go_summary <- function(path) {
+  check_file_exists(path)
+  df <- readr::read_csv(path, show_col_types = FALSE)
+  check_required_columns(
+    df,
+    required_cols = c("CancerType", "GO_term", "neglog10_pval", "GeneRatio"),
+    df_name = "GO summary table"
+  )
+  df
+}
+
+read_differential_table <- function(path, df_name) {
+  check_file_exists(path)
+  df <- readr::read_csv(path, show_col_types = FALSE)
+  check_required_columns(
+    df,
+    required_cols = c("CancerType", "pval_adj", "logFC"),
+    df_name = df_name
+  )
+  df
+}
+```
+
+# 4. Define representative GO programs
+
+The GO terms below are representative programs selected for the final pancancer summary plot. Each GO term is assigned to one functional class, and the functional class is used as the facet label in the final figure.
+
+```{r representative-go-terms}
+representative_GO_by_class <- list(
+  `Interferon / cytokine / inflammatory signaling` = c(
+    "cellular response to cytokine stimulus (GO:0071345)"
+  ),
+  `Proliferation / cell cycle / DNA damage` = c(
+    "positive regulation of cell population proliferation (GO:0008284)"
+  ),
+  `Kinase / PI3K-AKT / MAPK signaling` = c(
+    "MAPK cascade (GO:0000165)"
+  ),
+  `ECM remodeling / adhesion / EMT-like remodeling` = c(
+    "extracellular matrix organization (GO:0030198)"
+  )
+)
+
+go_class_df <- tibble::enframe(representative_GO_by_class, name = "Feature_class") %>%
+  tidyr::unnest(value) %>%
+  dplyr::rename(GO_term = value)
+
+go_class_df
+```
+
+# 5. Read input data
+
+```{r read-data}
+plot_df <- read_go_summary(go_summary_file)
+CAF_deg <- read_differential_table(caf_activity_file, df_name = "CAF activity table")
+
+if (include_mi2_downstream_activity) {
+  downstream_pathway_deg <- read_differential_table(
+    mi2_downstream_file,
+    df_name = "MI2 downstream activity table"
+  )
+} else {
+  downstream_pathway_deg <- NULL
+}
+
+cat("GO summary rows:", nrow(plot_df), "\n")
+cat("CAF activity rows:", nrow(CAF_deg), "\n")
+if (!is.null(downstream_pathway_deg)) {
+  cat("MI2 downstream activity rows:", nrow(downstream_pathway_deg), "\n")
+}
+```
+
+# 6. Prepare GO program data
+
+This section keeps only the selected representative GO terms and converts the GO enrichment table into a shared plotting format.
+
+```{r prepare-go-data}
+plot_df_rep <- plot_df %>%
+  inner_join(go_class_df, by = "GO_term") %>%
+  transmute(
+    CancerType,
+    Feature       = strip_go_id(as.character(GO_term)),
+    Feature_class = Feature_class,
+    neglog10_pval = pmin(as.numeric(neglog10_pval), pvalue_cap),
+    size_raw      = as.numeric(GeneRatio),
+    size_type     = "GeneRatio"
+  ) %>%
+  filter(
+    !is.na(CancerType),
+    !is.na(Feature),
+    !is.na(Feature_class),
+    !is.na(neglog10_pval),
+    !is.na(size_raw)
+  )
+
+plot_df_rep
+```
+
+# 7. Prepare activity blocks
+
+CAF activity is always shown. The MI2 downstream activity block is optional and is controlled by `include_mi2_downstream_activity`.
+
+```{r prepare-activity-blocks}
+CAF_df <- CAF_deg %>%
+  transmute(
+    CancerType,
+    Feature       = "CAF score",
+    Feature_class = "CAF activity",
+    neglog10_pval = safe_neglog10(pval_adj, cap = pvalue_cap),
+    size_raw      = abs(as.numeric(logFC)),
+    size_type     = "logFC"
+  ) %>%
+  filter(
+    !is.na(CancerType),
+    !is.na(neglog10_pval),
+    !is.na(size_raw)
+  )
+
+Pathway_df <- NULL
+if (include_mi2_downstream_activity) {
+  Pathway_df <- downstream_pathway_deg %>%
+    transmute(
+      CancerType,
+      Feature       = "MI2 downstream activity",
+      Feature_class = "MI2 downstream activity",
+      neglog10_pval = safe_neglog10(pval_adj, cap = pvalue_cap),
+      size_raw      = abs(as.numeric(logFC)),
+      size_type     = "logFC"
+    ) %>%
+    filter(
+      !is.na(CancerType),
+      !is.na(neglog10_pval),
+      !is.na(size_raw)
+    )
+}
+
+cat("CAF activity plotting rows:", nrow(CAF_df), "\n")
+if (!is.null(Pathway_df)) {
+  cat("MI2 downstream activity plotting rows:", nrow(Pathway_df), "\n")
+}
+```
+
+# 8. Merge and order plotting data
+
+All features are converted into one plotting table with a fixed feature order, functional-class order, and cancer-type order.
+
+```{r merge-and-order}
+plot_df_all <- bind_rows(CAF_df, Pathway_df, plot_df_rep)
+
+GO_feature_order <- unlist(representative_GO_by_class, use.names = FALSE) %>%
+  strip_go_id()
+
+activity_feature_order <- c("CAF score")
+activity_class_order <- c("CAF activity")
+
+if (include_mi2_downstream_activity) {
+  activity_feature_order <- c(activity_feature_order, "MI2 downstream activity")
+  activity_class_order <- c(activity_class_order, "MI2 downstream activity")
+}
+
+feature_order <- c(activity_feature_order, GO_feature_order)
+feature_class_order <- c(activity_class_order, names(representative_GO_by_class))
+
+plot_df_all <- plot_df_all %>%
+  mutate(
+    Feature = factor(Feature, levels = feature_order),
+    Feature_class = factor(Feature_class, levels = feature_class_order),
+    CancerType = factor(CancerType, levels = cancer_order),
+    Point_shape_group = case_when(
+      Feature_class == "CAF activity" ~ "CAF activity",
+      Feature_class == "MI2 downstream activity" ~ "MI2 downstream activity",
+      TRUE ~ "GO program"
+    ),
+    size_val = pmin(size_raw / effect_size_cap, 1)
+  )
+
+plot_df_all
+```
+
+# 9. Select significant features for plotting
+
+Only entries passing the adjusted p-value threshold are shown in the final figure.
+
+```{r significant-plot-data}
+sig_cutoff <- -log10(adjusted_p_cutoff)
+
+plot_df_plot <- plot_df_all %>%
+  filter(
+    !is.na(Feature),
+    !is.na(Feature_class),
+    !is.na(CancerType),
+    !is.na(neglog10_pval),
+    !is.na(size_val)
+  ) %>%
+  filter(neglog10_pval > sig_cutoff)
+
+cat("Rows shown in final plot:", nrow(plot_df_plot), "\n")
+plot_df_plot
+```
+
+# 10. Plot pancancer cascade programs
+
+Color represents `-log10(adjusted P)`. Point size represents the effect-size-like quantity from each input block: absolute log fold change for CAF or optional MI2 downstream activity, and gene ratio for GO enrichment.
+
+```{r plot-cascade-go, fig.width=8.5, fig.height=8.7}
+size_breaks <- c(0.25, 0.5, 0.75, 1)
+size_labels <- size_breaks * effect_size_cap
+
+shape_values <- c(
+  "CAF activity" = 15,
+  "MI2 downstream activity" = 15,
+  "GO program" = 16
+)
+
+p <- ggplot(plot_df_plot, aes(x = Feature, y = CancerType)) +
+  geom_point(
+    aes(
+      size  = size_val,
+      color = neglog10_pval,
+      shape = Point_shape_group
+    ),
+    stroke = 0.3,
+    na.rm  = TRUE
+  ) +
+  scale_shape_manual(
+    values = shape_values,
+    guide = "none"
+  ) +
+  scale_color_gradientn(
+    colors = c("#1400FC", "#CA0089", "#FE0006"),
+    limits = c(0, pvalue_cap),
+    oob    = scales::squish,
+    name   = expression(-log[10]~"(adjusted P)")
+  ) +
+  scale_size_continuous(
+    name   = "Effect size",
+    range  = c(3, 11),
+    limits = c(0, 1),
+    breaks = size_breaks,
+    labels = scales::label_number(accuracy = 0.001)(size_labels)
+  ) +
+  facet_grid(
+    ~ Feature_class,
+    scales = "free_x",
+    space  = "free_x",
+    drop   = TRUE
+  ) +
+  scale_y_discrete(
+    labels = function(x) format_cancer_label(x),
+    drop = FALSE
+  ) +
+  labs(x = NULL, y = "Cancer type") +
+  theme_classic(base_size = 8, base_family = "Arial") +
+  theme(
+    axis.line         = element_line(linewidth = 0.35, colour = "black"),
+    axis.ticks        = element_line(linewidth = 0.35, colour = "black"),
+    axis.ticks.length = unit(1.4, "mm"),
+
+    strip.background  = element_blank(),
+    strip.text.x      = element_text(face = "bold", size = 8, colour = "black"),
+
+    axis.text.x       = element_text(
+      angle = 60,
+      hjust = 1,
+      vjust = 1,
+      size = 7,
+      colour = "black"
+    ),
+    axis.text.y       = element_text(size = 8, colour = "black"),
+    axis.title.y      = element_text(size = 9, colour = "black"),
+
+    panel.spacing.x   = unit(2.5, "mm"),
+    plot.margin       = margin(4, 6, 4, 6, unit = "mm"),
+
+    legend.position   = "bottom",
+    legend.title      = element_text(size = 8),
+    legend.text       = element_text(size = 7),
+    legend.key.height = unit(3.0, "mm"),
+    legend.key.width  = unit(10, "mm")
+  )
+
+p
+```
+
+# 11. Save final figure
+
+```{r save-figure}
+ggsave(
+  filename = paste0(output_prefix, ".pdf"),
+  plot     = p,
+  width    = 8.5,
+  height   = 8.7,
+  units    = "in",
+  device   = grDevices::cairo_pdf
+)
+
+ggsave(
+  filename = paste0(output_prefix, ".png"),
+  plot     = p,
+  width    = 8.5,
+  height   = 8.7,
+  units    = "in",
+  dpi      = 600
+)
+
+cat("Saved PDF to:", paste0(output_prefix, ".pdf"), "\n")
+cat("Saved PNG to:", paste0(output_prefix, ".png"), "\n")
+```
+
+# 12. Session information
+
+```{r session-info}
+sessionInfo()
+```
+
+# Notes for adapting this notebook
+
+When adapting this notebook to another cascade, the sections that usually need to change are:
+
+- `result_dir` and the input file names;
+- `output_prefix`;
+- the representative GO terms in `representative_GO_by_class`;
+- `include_mi2_downstream_activity`, if the downstream activity block should be shown;
+- `cancer_order`, if the dataset includes a different cancer-type set;
+- `pvalue_cap`, `adjusted_p_cutoff`, and `effect_size_cap`, if a different display scale is needed.
