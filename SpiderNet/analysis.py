@@ -373,11 +373,7 @@ def MI_Celltypepair_enrichment(
     Parameters
     ----------
     SpiderNet_data_pyg_list_path : str
-<<<<<<< HEAD
         Path to the pickled list of per-sample PyG-like dicts containing 'edge_index', 'cell_class', etc.
-=======
-        Path to SpiderNet_data_pyg_list.pkl or SpiderNet_data_pyg_list.pt containing per-sample PyG-like objects with 'edge_index', 'cell_class', etc.
->>>>>>> 21dee28 (Update SpiderNet package and tutorials)
     Factor_envir_use_path : str
         Path to a .npy file of MI edge-level strengths (E x K).
     file_savepath_main : str
@@ -409,16 +405,7 @@ def MI_Celltypepair_enrichment(
     # -----------------------------
     # Load inputs
     # -----------------------------
-<<<<<<< HEAD
     CellFlowMap_data_pyg_list = pd.read_pickle(SpiderNet_data_pyg_list_path)
-=======
-    try:
-        from .io import load_spidernet_pyg_list
-    except ImportError:  # pragma: no cover
-        from SpiderNet.io import load_spidernet_pyg_list
-
-    CellFlowMap_data_pyg_list = load_spidernet_pyg_list(SpiderNet_data_pyg_list_path)
->>>>>>> 21dee28 (Update SpiderNet package and tutorials)
     Factor_envir_use = np.load(Factor_envir_use_path)
 
     # If metadata is provided, load and index by sample name
@@ -1262,11 +1249,7 @@ def MIinduced_cellembedding(
         Factor_envir_list_path (str): Path to Factor_envir_list.pkl.
         adata_copy_path (str): Path to adata_all.h5ad.
         device (str): "cuda:0" or "cpu".
-<<<<<<< HEAD
         SpiderNet_data_pyg_list_path (str): Path to SpiderNet_data_pyg_list.pkl.
-=======
-        SpiderNet_data_pyg_list_path (str): Path to SpiderNet_data_pyg_list.pkl or SpiderNet_data_pyg_list.pt.
->>>>>>> 21dee28 (Update SpiderNet package and tutorials)
         LR_list_merge_path (str): Path to LR_list_merge.pkl.
         Avg_MI_cellclass_pair_merge_use_path (str): Path to Avg_MI_cellclass_pair_merge_use.pkl.
         dim_envir (int): Dimension of environmental factor.
@@ -1281,16 +1264,7 @@ def MIinduced_cellembedding(
     ## ---------------------------
     Factor_envir_list = pd.read_pickle(Factor_envir_list_path)
     adata_copy = sc.read_h5ad(adata_copy_path)
-<<<<<<< HEAD
     SpiderNet_data_pyg_list = pd.read_pickle(SpiderNet_data_pyg_list_path)
-=======
-    try:
-        from .io import load_spidernet_pyg_list
-    except ImportError:  # pragma: no cover
-        from SpiderNet.io import load_spidernet_pyg_list
-
-    SpiderNet_data_pyg_list = load_spidernet_pyg_list(SpiderNet_data_pyg_list_path)
->>>>>>> 21dee28 (Update SpiderNet package and tutorials)
     LR_list_merge = pd.read_pickle(LR_list_merge_path)
     Avg_MI_cellclass_pair_merge_use = pd.read_pickle(Avg_MI_cellclass_pair_merge_use_path)
 

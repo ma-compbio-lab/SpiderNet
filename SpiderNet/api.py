@@ -15,10 +15,7 @@ from .config import PathConfig, PreprocessConfig
 
 REQUIRED_PREPROCESSED_FILES = [
     "adata_all.h5ad",
-<<<<<<< HEAD
-    "SpiderNet_data_pyg_list.pkl",
-=======
->>>>>>> 21dee28 (Update SpiderNet package and tutorials)
+    "SpiderNet_data_pyg_list.pkl or SpiderNet_data_pyg_list.pt",
     "metadata_sample.csv",
     "LR_list.pkl",
     "LR_list_cellchatdb.pkl",
@@ -29,14 +26,6 @@ REQUIRED_PREPROCESSED_FILES = [
     "adata_list.pkl",
 ]
 
-<<<<<<< HEAD
-=======
-REQUIRED_SPIDERNET_PYG_FILE_CANDIDATES = [
-    "SpiderNet_data_pyg_list.pkl",
-    "SpiderNet_data_pyg_list.pt",
-]
-
->>>>>>> 21dee28 (Update SpiderNet package and tutorials)
 
 
 
@@ -197,6 +186,7 @@ def normalize_outputs(results: dict[str, Any], eps: float = 1e-10) -> dict[str, 
     return results
 
 def export_results(results: dict[str, Any], processed: ProcessedData, precessed_data_dir: str | Path, output_dir: str | Path) -> None:
+    precessed_data_dir = Path(precessed_data_dir)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     import pickle
