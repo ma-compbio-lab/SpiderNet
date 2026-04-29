@@ -1,10 +1,9 @@
 
-from __future__ import annotations
-
 import argparse
 import json
 import os
 import pickle
+import warnings
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
@@ -478,6 +477,35 @@ def _maybe_sort_sample_ids(batch_cell_unique: np.ndarray, cfg: ConfigDict) -> np
 def _save_pickle(obj: Any, path: Path) -> None:
     with open(path, "wb") as f:
         pickle.dump(obj, f)
+
+
+def _save_spidernet_pyg_list(obj: Any, output_dir: Path) -> Path:
+    """Save SpiderNet PyG data as .pkl, falling back to .pt if needed.
+
+    Older notebooks expect SpiderNet_data_pyg_list.pkl. For very large processed
+    objects, pickle can fail or run out of memory on some systems; in that case
+    we write SpiderNet_data_pyg_list.pt instead. The paired loader in
+    SpiderNet.io resolves either extension automatically.
+    """
+    pkl_path = output_dir / "SpiderNet_data_pyg_list.pkl"
+    pt_path = output_dir / "SpiderNet_data_pyg_list.pt"
+
+    try:
+        _save_pickle(obj, pkl_path)
+        return pkl_path
+    except (MemoryError, OverflowError, RuntimeError, OSError, pickle.PicklingError) as exc:
+        if pkl_path.exists():
+            try:
+                pkl_path.unlink()
+            except OSError:
+                pass
+        warnings.warn(
+            "Saving SpiderNet_data_pyg_list.pkl failed; falling back to "
+            f"SpiderNet_data_pyg_list.pt. Original error: {exc}",
+            RuntimeWarning,
+        )
+        torch.save(obj, pt_path)
+        return pt_path
 
 def _json_safe(value: Any) -> Any:
     if callable(value):
@@ -1314,7 +1342,7 @@ def prepare_processed_bundle_unified(config: Mapping[str, Any]) -> dict[str, Any
 
     print("Step 12: Save processed objects")
     adata_copy.write_h5ad(output_dir / "adata_all.h5ad", compression="gzip")
-    _save_pickle(SpiderNet_data_pyg_list, output_dir / "SpiderNet_data_pyg_list.pkl")
+    _save_spidernet_pyg_list(SpiderNet_data_pyg_list, output_dir)
     _save_pickle(LR_list, output_dir / "LR_list.pkl")
     _save_pickle(LR_list_cellchatdb, output_dir / "LR_list_cellchatdb.pkl")
     _save_pickle(LR_meta_cellchatdb, output_dir / "LR_meta_cellchatdb.pkl")

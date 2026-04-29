@@ -27,6 +27,10 @@ ENV/
 
 # Jupyter
 .ipynb_checkpoints/
+<<<<<<< HEAD
+=======
+.jupyter/
+>>>>>>> 21dee28 (Update SpiderNet package and tutorials)
 
 # OS files
 .DS_Store
@@ -35,6 +39,24 @@ Thumbs.db
 # Logs
 *.log
 
+<<<<<<< HEAD
+=======
+# Local/private config
+.env
+.env.*
+*.local
+
+# Temporary files
+*.tmp
+*.bak
+~$*
+
+# Coverage / test cache
+.pytest_cache/
+.coverage
+htmlcov/
+
+>>>>>>> 21dee28 (Update SpiderNet package and tutorials)
 # Local results and large data
 Results/
 Data/
@@ -63,4 +85,8 @@ Data/
 
 # Analysis logs and generated report folders
 omnipathr-log/
+<<<<<<< HEAD
 GO_MIOI_target/
+=======
+GO_MIOI_target/
+>>>>>>> 21dee28 (Update SpiderNet package and tutorials)
