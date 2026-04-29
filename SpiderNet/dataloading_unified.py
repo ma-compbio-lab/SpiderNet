@@ -83,6 +83,13 @@ DEFAULT_CONFIG: ConfigDict = {
     "save_extra_tables": {},  # {"metadata_sample.csv": dataframe}
     "save_adata_file_list_pickle": False,
     "save_bundle_summary_json": True,
+<<<<<<< HEAD
+=======
+    # Estimated total tensor size threshold. If SpiderNet_data_pyg_list is at or above
+    # this size, save it with torch.save(... .pt) instead of pickle to avoid high
+    # pickle/BytesIO memory peaks. Set to None to always try .pkl first.
+    "pyg_pickle_size_threshold_gb": 8.0,
+>>>>>>> 21dee28 (Update SpiderNet package and tutorials)
 }
 
 def _normalize_config(config: Mapping[str, Any]) -> ConfigDict:
@@ -479,6 +486,110 @@ def _save_pickle(obj: Any, path: Path) -> None:
     with open(path, "wb") as f:
         pickle.dump(obj, f)
 
+<<<<<<< HEAD
+=======
+
+def _tensor_size_gb(x: Any) -> float:
+    if torch.is_tensor(x):
+        return x.numel() * x.element_size() / 1024**3
+    return 0.0
+
+
+def _pyg_data_size_gb(data: Any) -> float:
+    total = 0.0
+
+    try:
+        iterator = data
+        for _, value in iterator:
+            if torch.is_tensor(value):
+                total += _tensor_size_gb(value)
+        return total
+    except Exception:
+        pass
+
+    if hasattr(data, "keys"):
+        for key in data.keys():
+            try:
+                value = data[key]
+            except Exception:
+                continue
+            if torch.is_tensor(value):
+                total += _tensor_size_gb(value)
+
+    return total
+
+
+def _format_size_list_gb(sizes: list[float]) -> list[float]:
+    return [round(float(x), 4) for x in sizes]
+
+
+def _remove_if_exists(path: Path) -> None:
+    try:
+        if path.exists():
+            path.unlink()
+    except OSError:
+        # Do not fail preprocessing only because an old alternate-format file
+        # cannot be removed. The loader still prefers .pkl when both exist.
+        pass
+
+
+def _save_spidernet_pyg_list(
+    SpiderNet_data_pyg_list: list[Any],
+    output_dir: Path,
+    *,
+    threshold_gb: float | None = 8.0,
+) -> Path:
+    """Save SpiderNet_data_pyg_list as .pkl for small data and .pt for large data.
+
+    The size estimate uses the sum of tensor storages inside each PyG Data object.
+    Pickle can create large temporary BytesIO copies for torch tensors, so large
+    objects are saved with torch.save directly to reduce memory peaks. If pickle
+    still fails for a smaller object, we automatically fall back to .pt.
+    """
+    pkl_path = output_dir / "SpiderNet_data_pyg_list.pkl"
+    pt_path = output_dir / "SpiderNet_data_pyg_list.pt"
+
+    sizes = [_pyg_data_size_gb(data) for data in SpiderNet_data_pyg_list]
+    total_size_gb = float(sum(sizes))
+    largest_size_gb = float(max(sizes)) if sizes else 0.0
+
+    print("Number of PyG samples:", len(SpiderNet_data_pyg_list))
+    print("Total tensor size GB:", total_size_gb)
+    print("Largest sample GB:", largest_size_gb)
+    print("Per-sample GB:", _format_size_list_gb(sizes))
+
+    use_pt = threshold_gb is not None and total_size_gb >= float(threshold_gb)
+
+    if use_pt:
+        print(
+            "Estimated PyG tensor size exceeds threshold "
+            f"({total_size_gb:.2f} >= {float(threshold_gb):.2f} GB). "
+            "Saving SpiderNet_data_pyg_list with torch.save as .pt."
+        )
+        torch.save(SpiderNet_data_pyg_list, pt_path)
+        _remove_if_exists(pkl_path)
+        return pt_path
+
+    try:
+        print(
+            "Estimated PyG tensor size is below threshold "
+            f"({total_size_gb:.2f} GB). Saving SpiderNet_data_pyg_list as .pkl."
+        )
+        _save_pickle(SpiderNet_data_pyg_list, pkl_path)
+        _remove_if_exists(pt_path)
+        return pkl_path
+    except (MemoryError, ValueError, RuntimeError) as exc:
+        print(
+            "Saving SpiderNet_data_pyg_list as .pkl failed. "
+            "Falling back to torch.save(... .pt). "
+            f"Original error: {type(exc).__name__}: {exc}"
+        )
+        _remove_if_exists(pkl_path)
+        torch.save(SpiderNet_data_pyg_list, pt_path)
+        return pt_path
+
+
+>>>>>>> 21dee28 (Update SpiderNet package and tutorials)
 def _json_safe(value: Any) -> Any:
     if callable(value):
         return getattr(value, "__name__", str(value))
@@ -1314,7 +1425,15 @@ def prepare_processed_bundle_unified(config: Mapping[str, Any]) -> dict[str, Any
 
     print("Step 12: Save processed objects")
     adata_copy.write_h5ad(output_dir / "adata_all.h5ad", compression="gzip")
+<<<<<<< HEAD
     _save_pickle(SpiderNet_data_pyg_list, output_dir / "SpiderNet_data_pyg_list.pkl")
+=======
+    _save_spidernet_pyg_list(
+        SpiderNet_data_pyg_list,
+        output_dir,
+        threshold_gb=cfg.get("pyg_pickle_size_threshold_gb"),
+    )
+>>>>>>> 21dee28 (Update SpiderNet package and tutorials)
     _save_pickle(LR_list, output_dir / "LR_list.pkl")
     _save_pickle(LR_list_cellchatdb, output_dir / "LR_list_cellchatdb.pkl")
     _save_pickle(LR_meta_cellchatdb, output_dir / "LR_meta_cellchatdb.pkl")
