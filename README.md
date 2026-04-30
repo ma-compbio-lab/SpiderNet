@@ -52,7 +52,7 @@ pip install -e .
 
 Editable installation is recommended when modifying the source code, because changes in the `SpiderNet/` package are reflected without reinstalling.
 
-### 3. Optional: install tutorial dependencies
+### 3. Optional: install tutorial, benchmark, and UI dependencies
 
 To run tutorial notebooks, install additional lightweight notebook dependencies:
 
@@ -64,6 +64,12 @@ Alternatively, install the tutorial optional dependency group defined in `pyproj
 
 ```bash
 pip install -e ".[tutorial]"
+```
+
+To run **SpiderNet-Interactive**, install the UI/web-app dependencies:
+
+```bash
+pip install -r requirements-UI.txt
 ```
 
 Some simulation benchmark tutorials require additional external-method dependencies. Install them only when needed:
@@ -229,7 +235,7 @@ scseqcomm_human = get_default_scseqcomm_db("human")
 
 ## Notes for users
 
-The tutorial notebooks may require additional dependencies beyond the core SpiderNet package. Lightweight notebook dependencies are provided in `requirements-tutorial.txt`. Heavier benchmark or external-method dependencies are provided in `requirements-benchmark.txt` and should be installed only when needed.
+The tutorial notebooks and SpiderNet-Interactive web app may require additional dependencies beyond the core SpiderNet package. Lightweight notebook dependencies are provided in `requirements-tutorial.txt`. UI/web-app dependencies for SpiderNet-Interactive are provided in `requirements-UI.txt`. Heavier benchmark or external-method dependencies are provided in `requirements-benchmark.txt` and should be installed only when needed.
 
 R/R Markdown tutorials require separate R packages; see `Tutorial/R_requirements.md`.
 
@@ -255,12 +261,27 @@ SpiderNet ships with **SpiderNet-Interactive**, a local Flask web app for intera
 
 ### Quick start
 
+From the repository root, install the UI dependencies first:
+
 ```bash
-cd SpiderNet/SpiderNet-interactive
+pip install -r requirements-UI.txt
+```
+
+Then start the local web app:
+
+```bash
+cd SpiderNet-interactive
 bash run.sh
 ```
 
 Then open **http://localhost:8000**.
+
+On Windows, if `bash run.sh` cannot access the active conda environment, run the app directly from Anaconda Prompt or PowerShell:
+
+```bash
+cd SpiderNet-interactive
+python app.py
+```
 
 ### Modules
 
@@ -273,13 +294,13 @@ Then open **http://localhost:8000**.
 
 ### Interface
 
-Editorial-scientific design — quiet, typographic, intentional. Source Serif 4 / Geist / Geist Mono pairing, OKLCH color tokens, full **light and dark mode** with an in-app toggle (persisted to `localStorage`, auto-follows OS preference). All server-rendered Plotly figures re-fetch with the new theme on toggle, so plots stay readable in both modes. Respects `prefers-reduced-motion`.
+Editorial-scientific design — quiet, typographic, intentional. Source Serif 4 / Geist / Geist Mono pairing, OKLCH color tokens, full **light and dark mode** with an in-app toggle that is persisted to `localStorage` and auto-follows the operating-system preference. All server-rendered Plotly figures re-fetch with the new theme on toggle, so plots stay readable in both modes. The interface also respects `prefers-reduced-motion`.
 
 ### Datasets
 
 The app auto-discovers datasets under `Interactivetool/SpiderNet-interactive_V2/`. Each dataset must be a directory ending in `_UI/` containing:
 
-```
+```text
 <Name>_UI/
 ├── <Name>_modeltraining_setup.json
 ├── config.json
@@ -296,6 +317,6 @@ The app auto-discovers datasets under `Interactivetool/SpiderNet-interactive_V2/
             └── model_epoch*.pth
 ```
 
-Restart the app after adding a dataset — discovery runs once at startup. Each appears as a row on the home page with chips linking to M1–M4.
+Restart the app after adding a dataset, because discovery runs once at startup. Each dataset appears as a row on the home page with chips linking to M1–M4.
 
 For module internals, the design system, caching layout, and customization, see [SpiderNet-interactive/README.md](SpiderNet-interactive/README.md).
