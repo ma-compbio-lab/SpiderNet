@@ -50,12 +50,12 @@ Follow the main [SpiderNet README](../README.md#installation) — it covers PyTo
 ### 2. Install the web-app extras
 
 ```bash
-conda activate spidernet                 # whatever env you used for SpiderNet
-cd SpiderNet/SpiderNet-interactive
-pip install -r requirements.txt
+conda activate SpiderNet_env             # whatever env you used for SpiderNet
+cd SpiderNet
+pip install -r requirements-UI.txt
 ```
 
-`requirements.txt` adds Flask + Plotly + a few omics tools (`scanpy`, `umap-learn`, `python-louvain`, `gseapy`) on top of the existing scientific stack. Anything already in the env is skipped.
+`requirements-UI.txt` (at the repo root) adds Flask + Plotly + a few omics tools (`scanpy`, `umap-learn`, `igraph`, `Louvain`, `gseapy`) on top of the existing scientific stack. Anything already in the env is skipped.
 
 ### 3. Run the server
 
@@ -97,7 +97,6 @@ SpiderNet-interactive/
 ├── app.py                          # Flask app factory; registers the four blueprints
 ├── config.py                       # SEARCH_ROOT, PORT, APP_TITLE, DEBUG
 ├── run.sh                          # Start script
-├── requirements.txt
 ├── core/
 │   ├── datasets.py                 # *_UI discovery and path resolution
 │   └── loaders.py                  # Process-wide cache for adata / pyg / factor lists

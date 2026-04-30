@@ -261,25 +261,14 @@ SpiderNet ships with **SpiderNet-Interactive**, a local Flask web app for intera
 
 ### Installation
 
-The web app reuses the SpiderNet environment. PyTorch + PyTorch Geometric (and the SpiderNet package itself) must already be installed via the steps above; then add the web-app extras on top:
+The web app reuses the SpiderNet environment. PyTorch + PyTorch Geometric (and the SpiderNet package itself) must already be installed via the steps above; then add the web-app extras on top from the repository root:
 
 ```bash
 conda activate SpiderNet_env             # the env you used for SpiderNet
-cd SpiderNet/SpiderNet-interactive
-pip install -r requirements.txt
-```
-
-`requirements.txt` adds Flask + Plotly + a few omics tools (`scanpy`, `umap-learn`, `python-louvain`, `gseapy`) on top of the existing scientific stack. Anything already in the env is skipped. `torch` and `torch-geometric` are listed only as comments since they need CUDA/OS-specific wheels — install them via the SpiderNet steps above.
-
-### Quick start
-
-From the repository root, install the UI dependencies first:
-
-```bash
 pip install -r requirements-UI.txt
 ```
 
-Then start the local web app:
+### Quick start
 
 ```bash
 cd SpiderNet-interactive
