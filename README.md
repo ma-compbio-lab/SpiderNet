@@ -249,3 +249,56 @@ If you use SpiderNet in your research, please cite the corresponding SpiderNet m
 ## License
 
 This project is distributed under the MIT License.
+
+---
+
+## SpiderNet-Interactive: web app for exploring SpiderNet runs
+
+SpiderNet ships with **SpiderNet-Interactive**, a local Flask web app for interactively exploring trained SpiderNet runs in the browser. Four interconnected modules drive directly off the trained model and processed data — no static plots, every figure is rendered live from the cached run.
+
+### Quick start
+
+```bash
+cd SpiderNet/SpiderNet-interactive
+bash run.sh
+```
+
+Then open **http://localhost:8000**.
+
+### Modules
+
+| | | |
+|---|---|---|
+| **M1** | Basic analysis | *In situ* MI rendering, top LR / sender / receiver loadings per MI, pathway and cell-type-pair enrichment. |
+| **M2** | Subtype discovery | MI-guided clustering of one cell type — PCA → kNN → Louvain → UMAP — with DEGs and GO/KEGG per subcluster. |
+| **M3** | MI cascade | Permutation-tested MI×MI cascade pairs, cell-type triplet stems, *in situ* cascade rendering, and DEG/GO at each cascade position. |
+| **M4** | Spatial perturbation | *In silico* gene knockdown or cell-type replacement against the trained SpiderNet model, paired DEG vs. baseline, GO/KEGG enrichment. |
+
+### Interface
+
+Editorial-scientific design — quiet, typographic, intentional. Source Serif 4 / Geist / Geist Mono pairing, OKLCH color tokens, full **light and dark mode** with an in-app toggle (persisted to `localStorage`, auto-follows OS preference). All server-rendered Plotly figures re-fetch with the new theme on toggle, so plots stay readable in both modes. Respects `prefers-reduced-motion`.
+
+### Datasets
+
+The app auto-discovers datasets under `Interactivetool/SpiderNet-interactive_V2/`. Each dataset must be a directory ending in `_UI/` containing:
+
+```
+<Name>_UI/
+├── <Name>_modeltraining_setup.json
+├── config.json
+├── run_dirs.json
+├── ProcessedData/                      # adata_list.pkl, SpiderNet_data_pyg_list.pkl, ...
+└── <VERSION>/
+    └── SpiderNet_Result_dim*/
+        ├── Factor_envir_list.pkl
+        ├── loading_LR_use.npy
+        ├── loading_sender_use.npy
+        ├── loading_receiver_use.npy
+        └── Model/
+            ├── SpiderNet_model_config.json
+            └── model_epoch*.pth
+```
+
+Restart the app after adding a dataset — discovery runs once at startup. Each appears as a row on the home page with chips linking to M1–M4.
+
+For module internals, the design system, caching layout, and customization, see [SpiderNet-interactive/README.md](SpiderNet-interactive/README.md).

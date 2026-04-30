@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Publication — {{ app_title }}{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 880px;">
+
+    <header class="hero" style="border-bottom: 1px solid var(--border); margin-bottom: var(--space-2xl);">
+        <p class="eyebrow">Publication</p>
+        <h1 class="hero__title" style="max-width: 18ch;">
+            Citation <em>&amp;</em> software
+        </h1>
+    </header>
+
+    <section class="team-section" aria-labelledby="paper-main">
+        <p class="team-section__eyebrow">Manuscript</p>
+        <h2 class="team-section__heading" id="paper-main">SpiderNet: Interpretable modeling of intercellular meta-interactions</h2>
+
+        <p>
+            A framework for learning cell–cell meta-interaction representations from spatial transcriptomics data
+            as directional modules of multicellular regulation. Each meta-interaction represents a latent,
+            coordinated communication module defined over ordered sender–receiver cell pairs, linking sender regulators,
+            ligand–receptor bridges, and receiver targets.
+        </p>
+
+        <dl class="row g-3 mt-3 mb-0" style="font-size: var(--text-sm);">
+            <dt class="col-sm-2 text-muted m-0" style="font-weight: 500;">Authors</dt>
+            <dd class="col-sm-10 m-0">Junjie Tang, Shaoheng Liang, Shahul Alam, Wenduo Cheng, Yang Zhang, Jian Ma</dd>
+            <dt class="col-sm-2 text-muted m-0" style="font-weight: 500;">Status</dt>
+            <dd class="col-sm-10 m-0"><span class="badge bg-warning">Manuscript in preparation</span></dd>
+        </dl>
+    </section>
+
+    <section class="team-section" aria-labelledby="paper-cite">
+        <p class="team-section__eyebrow">How to cite</p>
+        <h2 class="team-section__heading" id="paper-cite">Citation</h2>
+        <pre style="background: var(--bg-sunken); border: 1px solid var(--border); border-radius: var(--radius-md); padding: var(--space-md); margin: 0; overflow-x: auto;"><code style="border: 0; padding: 0; background: transparent; font-size: var(--text-xs); line-height: 1.55; white-space: pre-wrap;">Tang, J., Liang, S., Alam, S., Cheng, W., Zhang, Y., &amp; Ma, J. (2024).
+SpiderNet: Interpretable modeling of intercellular meta-interactions.
+Manuscript in preparation.</code></pre>
+        <p class="text-muted mt-2 mb-0" style="font-size: var(--text-xs);">
+            Citation will be updated once the paper is published.
+        </p>
+    </section>
+
+    <section class="team-section" aria-labelledby="paper-software">
+        <p class="team-section__eyebrow">Software</p>
+        <h2 class="team-section__heading" id="paper-software">Open source</h2>
+        <p>
+            SpiderNet is open source. Source code, documentation, and example notebooks are on GitHub.
+        </p>
+        <p>
+            <a href="https://github.com/ma-compbio-lab/SpiderNet" target="_blank" rel="noopener" class="btn btn-outline-primary">
+                <i class="fab fa-github me-1" aria-hidden="true"></i> View on GitHub
+            </a>
+        </p>
+    </section>
+
+    <section class="team-section" aria-labelledby="paper-resources">
+        <p class="team-section__eyebrow">Resources</p>
+        <h2 class="team-section__heading" id="paper-resources">Data and examples</h2>
+        <ul class="team-list">
+            <li class="team-list__item">
+                <span class="team-list__name" style="font-size: var(--text-base);">Example datasets &amp; trained models</span>
+                <a class="team-list__role" href="https://drive.google.com/drive/folders/15tC6j2cQdNUNZHs1Zjmw-XnDx0Y7PapE?usp=sharing" target="_blank" rel="noopener">
+                    Google Drive <i class="fas fa-arrow-up-right-from-square ms-1" aria-hidden="true"></i>
+                </a>
+            </li>
+            <li class="team-list__item">
+                <span class="team-list__name" style="font-size: var(--text-base);">Tutorials and example notebooks</span>
+                <a class="team-list__role" href="https://github.com/ma-compbio-lab/SpiderNet/tree/main/Examples" target="_blank" rel="noopener">
+                    GitHub Examples <i class="fas fa-arrow-up-right-from-square ms-1" aria-hidden="true"></i>
+                </a>
+            </li>
+        </ul>
+    </section>
+
+    <p class="mt-4">
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1" aria-hidden="true"></i> Back to home
+        </a>
+    </p>
+</div>
+{% endblock %}

@@ -1,3 +1,9 @@
+# Local-only files
+CLAUDE.md
+PLAN.md
+Interactivetool
+skill*
+
 # Python bytecode / cache
 __pycache__/
 *.py[cod]
@@ -84,3 +90,4 @@ GO_MIOI_target/
 =======
 GO_MIOI_target/
 >>>>>>> 21dee28 (Update SpiderNet package and tutorials)
+SpiderNet_GitHub/
