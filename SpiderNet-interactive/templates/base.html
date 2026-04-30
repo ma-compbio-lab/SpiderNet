@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <title>{% block title %}{{ app_title }}{% endblock %}</title>
+
+    {# Theme bootstrap. Runs before paint to avoid a flash of the wrong theme. #}
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("spn-theme");
+          if (stored === "light" || stored === "dark") {
+            document.documentElement.setAttribute("data-theme", stored);
+          }
+        } catch (e) {}
+      })();
+    </script>
+
+    {# Type. Source Serif 4 for display, Geist for UI, Geist Mono for code. #}
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link rel="stylesheet"
+          href="https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,500;0,8..60,600;1,8..60,400&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+
+    {# Bootstrap 5 — kept because module pages use its grid, but heavily themed. #}
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    {% block extra_head %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg" aria-label="Primary">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="{{ url_for('index') }}" aria-label="SpiderNet — home">
+                <span aria-hidden="true">SpiderNet</span>
+            </a>
+
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
+                    aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    {% if dataset_name %}
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'module1_basic.page' %}active{% endif %}"
+                           href="{{ url_for('module1_basic.page', dataset_name=dataset_name) }}">Basic</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'module2_subtype.page' %}active{% endif %}"
+                           href="{{ url_for('module2_subtype.page', dataset_name=dataset_name) }}">Subtype</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'module3_cascade.page' %}active{% endif %}"
+                           href="{{ url_for('module3_cascade.page', dataset_name=dataset_name) }}">Cascade</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link {% if request.endpoint == 'module4_perturb.page' %}active{% endif %}"
+                           href="{{ url_for('module4_perturb.page', dataset_name=dataset_name) }}">Perturbation</a>
+                    </li>
+                    {% endif %}
+                </ul>
+
+                <ul class="navbar-nav ms-auto align-items-lg-center">
+                    {% if datasets %}
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            Datasets
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            {% for name, info in datasets.items() %}
+                            <li><a class="dropdown-item" href="{{ url_for('module1_basic.page', dataset_name=name) }}">{{ name }}</a></li>
+                            {% endfor %}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="{{ url_for('index') }}">All datasets</a></li>
+                        </ul>
+                    </li>
+                    {% endif %}
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('team') }}">Team</a></li>
+                    <li class="nav-item"><a class="nav-link" href="{{ url_for('paper') }}">Paper</a></li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="https://github.com/ma-compbio-lab/SpiderNet" target="_blank" rel="noopener" aria-label="SpiderNet on GitHub">
+                            <i class="fab fa-github" aria-hidden="true"></i>
+                            <span class="visually-hidden">GitHub</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <div class="theme-toggle" role="group" aria-label="Theme">
+                            <button type="button" class="theme-toggle__btn" data-theme-set="light" aria-pressed="false" title="Light theme">
+                                <i class="fas fa-sun" aria-hidden="true"></i>
+                                <span class="visually-hidden">Light</span>
+                            </button>
+                            <button type="button" class="theme-toggle__btn" data-theme-set="dark" aria-pressed="false" title="Dark theme">
+                                <i class="fas fa-moon" aria-hidden="true"></i>
+                                <span class="visually-hidden">Dark</span>
+                            </button>
+                        </div>
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <main class="container-fluid mt-4 mb-5">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="footer">
+        <div class="container">
+            <small>SpiderNet — interpretable modeling of intercellular meta-interactions</small>
+        </div>
+    </footer>
+
+    <div class="modal fade" id="imageModal" tabindex="-1" aria-hidden="true" aria-labelledby="imageModalLabel">
+        <div class="modal-dialog modal-xl modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 class="modal-title h6 m-0" id="imageModalLabel">Plot</h2>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body text-center">
+                    <img id="modalImage" src="" class="img-fluid" alt="">
+                </div>
+                <div class="modal-footer">
+                    <a id="downloadPdf" href="#" class="btn btn-primary" target="_blank">Download PDF</a>
+                    <button type="button" class="btn" data-bs-dismiss="modal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {# Theme toggle controller. Updates DOM, persists choice, dispatches an event
+       module pages listen to so Plotly figures can re-render with the new theme. #}
+    <script>
+      (function () {
+        var root = document.documentElement;
+        var btns = document.querySelectorAll(".theme-toggle__btn");
+        function effective() {
+          var explicit = root.getAttribute("data-theme");
+          if (explicit === "light" || explicit === "dark") return explicit;
+          return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+        }
+        function paint() {
+          var t = effective();
+          btns.forEach(function (b) { b.setAttribute("aria-pressed", b.dataset.themeSet === t ? "true" : "false"); });
+          window.dispatchEvent(new CustomEvent("spn:themechange", { detail: { theme: t } }));
+        }
+        btns.forEach(function (b) {
+          b.addEventListener("click", function () {
+            var next = b.dataset.themeSet;
+            root.setAttribute("data-theme", next);
+            try { localStorage.setItem("spn-theme", next); } catch (e) {}
+            paint();
+          });
+        });
+        if (window.matchMedia) {
+          window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function () {
+            if (!root.getAttribute("data-theme")) paint();
+          });
+        }
+        paint();
+      })();
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>
