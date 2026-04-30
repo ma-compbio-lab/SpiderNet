@@ -4,12 +4,14 @@ A local web app for interactively exploring SpiderNet spatial omics analyses. Fo
 
 ## Quick start
 
+If your SpiderNet environment is already set up and the web-app extras are installed:
+
 ```bash
 cd SpiderNet/SpiderNet-interactive
 bash run.sh
 ```
 
-Then open **http://localhost:8000**.
+Then open **http://localhost:8000**. Otherwise, see [Installation](#installation).
 
 ## Modules
 
@@ -34,13 +36,36 @@ The UI is editorial-scientific in tone — quiet, typographic, designed to disap
 ## Requirements
 
 - Python 3.11+
-- Flask 3.0+
-- The same Python environment that trained your SpiderNet runs (PyTorch, PyTorch Geometric, scanpy, plotly, scipy). M4 additionally needs `gseapy` for GO/KEGG enrichment — without it the bubble plots show "no terms" but the rest of M4 still works.
+- The same Python environment that trained your SpiderNet runs.
+- `gseapy` for GO/KEGG enrichment in M1/M2/M4. Without it the bubble plots show "no terms" but the rest of the app works.
+
+## Installation
+
+The web app reuses the SpiderNet package's environment. Install the heavy CUDA/PyG bits first via the main SpiderNet README, then add the web-app extras on top.
+
+### 1. Install SpiderNet
+
+Follow the main [SpiderNet README](../README.md#installation) — it covers PyTorch, PyTorch Geometric, and `pip install -e .` for the SpiderNet package itself. M3 (cascade) and M4 (perturbation) need the SpiderNet package to be importable.
+
+### 2. Install the web-app extras
 
 ```bash
-conda activate spidernet
+conda activate spidernet                 # whatever env you used for SpiderNet
+cd SpiderNet/SpiderNet-interactive
 pip install -r requirements.txt
 ```
+
+`requirements.txt` adds Flask + Plotly + a few omics tools (`scanpy`, `umap-learn`, `python-louvain`, `gseapy`) on top of the existing scientific stack. Anything already in the env is skipped.
+
+### 3. Run the server
+
+```bash
+bash run.sh
+```
+
+Then open **http://localhost:8000**.
+
+> **Note:** the file lists `torch`/`torch-geometric` only as comments — they are not pip-installable from a generic index, so install them first via the main SpiderNet README (the CUDA/CPU-specific wheel commands).
 
 ## Datasets
 

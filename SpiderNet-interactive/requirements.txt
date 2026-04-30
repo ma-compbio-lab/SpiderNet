@@ -1,3 +1,53 @@
-Flask==3.0.0
-Pillow==10.1.0
-Werkzeug==3.0.0
+# SpiderNet-Interactive — Python dependencies
+#
+# The web app reuses the SpiderNet package's environment, so the simplest
+# install is:
+#
+#     conda activate spidernet                     # the env that trained your runs
+#     pip install -r requirements.txt              # adds Flask + plotly on top
+#
+# These pins are *floors*, not ceilings — they reflect what's been tested.
+# Tighten them if you need reproducibility.
+
+
+# --- Web framework -----------------------------------------------------------
+Flask>=3.0,<4.0
+Werkzeug>=3.0,<4.0
+
+
+# --- Visualization (server-rendered Plotly figures) --------------------------
+plotly>=5.20
+matplotlib>=3.8
+
+
+# --- Scientific stack (typically already in the SpiderNet env) ---------------
+numpy>=1.26,<2.0
+pandas>=2.2
+scipy>=1.11
+scikit-learn>=1.3
+
+
+# --- Single-cell / spatial omics (M2 subtype discovery, M4 perturbation) ----
+anndata>=0.10
+scanpy>=1.10
+umap-learn>=0.5
+python-louvain>=0.16    # required by sc.tl.louvain in M2
+
+
+# --- Pathway / GO enrichment (M1, M2, M3, M4 bubble plots) ------------------
+gseapy>=1.1
+
+
+# --- Deep-learning runtime (M3 cascade, M4 perturbation) --------------------
+#
+# torch and torch_geometric are not installed by pip alone — they are
+# CUDA/OS-specific. Install them BEFORE installing this file, following the
+# main SpiderNet README. Listed here only as a documentation reminder:
+#
+#   torch>=2.0
+#   torch-geometric>=2.6
+#   torch-scatter
+#   torch-sparse
+#
+# The SpiderNet package (which also depends on these) must be importable —
+# install it from the project root with `pip install -e .`.

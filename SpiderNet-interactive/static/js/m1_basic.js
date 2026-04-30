@@ -145,6 +145,45 @@
 
   topNInput.addEventListener("change", refreshLoadings);
 
+  // Cell-type interaction summary (chord/circle plots).
+  const circleAll = $("m1-circle-all");
+  const circleSlice = $("m1-circle-slice");
+  const circleAllTitle = $("m1-circle-all-title");
+  const circleSliceTitle = $("m1-circle-slice-title");
+  const circleMiLabel = $("m1-circle-mi");
+  const circleSpinner = $("m1-circle-spinner");
+
+  let circleInflight = 0;
+  async function refreshCircleSummary() {
+    const sliceIdx = parseInt(sliceSel.value, 10);
+    const miIdx = parseInt(miSel.value, 10);
+    if (Number.isNaN(sliceIdx) || Number.isNaN(miIdx)) return;
+    const reqId = ++circleInflight;
+    circleSpinner.classList.add("active");
+    try {
+      const r = await fetch(`${BASE}/api/circle-summary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slice_idx: sliceIdx, mi_idx: miIdx, theme: currentTheme() }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (reqId !== circleInflight) return;
+      if (!r.ok) throw new Error(data.error || `circle-summary ${r.status}`);
+      circleMiLabel.textContent = `· ${data.mi_name}`;
+      circleAllTitle.textContent = data.all_title;
+      circleSliceTitle.textContent = data.slice_title;
+      Plotly.react(circleAll, data.all_figure.data, data.all_figure.layout,
+        { responsive: true, displaylogo: false, displayModeBar: false });
+      Plotly.react(circleSlice, data.slice_figure.data, data.slice_figure.layout,
+        { responsive: true, displaylogo: false, displayModeBar: false });
+    } catch (err) {
+      if (reqId !== circleInflight) return;
+      circleMiLabel.textContent = `· error: ${err.message}`;
+    } finally {
+      if (reqId === circleInflight) circleSpinner.classList.remove("active");
+    }
+  }
+
   // Enrichment heatmaps — heavy on first call, lazy-loaded.
   const enrichBtn = $("m1-enrichment-load");
   const enrichStatus = $("m1-enrichment-status");
@@ -249,8 +288,8 @@
     setSpinner(true);
     try {
       await refreshSliceBound();
-      // Spatial render and loadings refresh in parallel.
-      await Promise.all([render(), refreshLoadings()]);
+      // Spatial render, loadings refresh, and circle summary refresh run in parallel.
+      await Promise.all([render(), refreshLoadings(), refreshCircleSummary()]);
     } catch (err) {
       setStatus(`Error: ${err.message}`);
     } finally {
@@ -270,6 +309,12 @@
     edgeWidth.value = 1.2;
     arrowSize.value = 0.55;
     await onSliceOrMiChange();
+  });
+
+  $("m1-select-all").addEventListener("click", async () => {
+    [...senderSel.options].forEach((o) => (o.selected = true));
+    [...receiverSel.options].forEach((o) => (o.selected = true));
+    await render();
   });
 
   // Bootstrap.
@@ -297,6 +342,7 @@
   // Re-render server-themed Plotly figures when the user toggles theme.
   window.addEventListener("spn:themechange", () => {
     refreshLoadings();
+    refreshCircleSummary();
     if (enrichmentLoaded) loadEnrichment();
   });
 })();
