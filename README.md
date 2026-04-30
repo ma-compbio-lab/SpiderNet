@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 ## Overview
 <img width="1920" height="1180" alt="SpiderNet_githubfigure" src="https://github.com/user-attachments/assets/6dbc2123-a2fc-4a05-b7f2-c3fe68710b5e" />
 
