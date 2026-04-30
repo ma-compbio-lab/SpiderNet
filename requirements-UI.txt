@@ -1,0 +1,6 @@
+Flask
+plotly
+igraph
+Louvain
+leidenalg
+setuptools<82
