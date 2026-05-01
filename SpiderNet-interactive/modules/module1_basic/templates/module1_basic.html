@@ -16,6 +16,7 @@
     font-family: var(--font-mono); letter-spacing: 0;
   }
   #m1-spatial-canvas { min-height: 720px; background: var(--plot-bg); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+  #m1-circle-all, #m1-circle-slice { background: var(--plot-bg); border-radius: var(--radius-sm); border: 1px solid var(--border); }
   .m1-spinner-overlay {
     position: absolute; inset: 0; display: none;
     align-items: center; justify-content: center;
@@ -69,24 +70,32 @@
           </div>
 
           <div class="row g-2 mb-3">
-            <div class="col-6">
+            <div class="col-12">
               <label for="m1-max-edges" class="small">Max edges</label>
               <input type="number" class="form-control form-control-sm" id="m1-max-edges" value="12000" min="500" step="500">
             </div>
-            <div class="col-6">
-              <label for="m1-marker-size" class="small">Marker size</label>
-              <input type="number" class="form-control form-control-sm" id="m1-marker-size" value="6" min="1" max="20" step="0.5">
-            </div>
-            <div class="col-6">
-              <label for="m1-edge-width" class="small">Edge width</label>
-              <input type="number" class="form-control form-control-sm" id="m1-edge-width" value="1.2" min="0.2" max="6" step="0.1">
-            </div>
-            <div class="col-6">
-              <label for="m1-arrow-size" class="small">Arrow size</label>
-              <input type="number" class="form-control form-control-sm" id="m1-arrow-size" value="0.55" min="0.1" max="2" step="0.05">
+            <div class="col-12">
+              <label for="m1-marker-size" class="small d-flex justify-content-between">
+                <span>Cell size</span><span class="font-monospace text-muted" id="m1-marker-size-val">6.0</span>
+              </label>
+              <input type="range" class="form-range" id="m1-marker-size" value="6" min="1" max="20" step="0.5">
             </div>
             <div class="col-12">
-              <label for="m1-cell-alpha" class="small">Cell alpha</label>
+              <label for="m1-edge-width" class="small d-flex justify-content-between">
+                <span>Edge width</span><span class="font-monospace text-muted" id="m1-edge-width-val">1.2</span>
+              </label>
+              <input type="range" class="form-range" id="m1-edge-width" value="1.2" min="0.2" max="6" step="0.1">
+            </div>
+            <div class="col-12">
+              <label for="m1-arrow-size" class="small d-flex justify-content-between">
+                <span>Arrow size</span><span class="font-monospace text-muted" id="m1-arrow-size-val">0.55</span>
+              </label>
+              <input type="range" class="form-range" id="m1-arrow-size" value="0.55" min="0.1" max="2" step="0.05">
+            </div>
+            <div class="col-12">
+              <label for="m1-cell-alpha" class="small d-flex justify-content-between">
+                <span>Cell alpha</span><span class="font-monospace text-muted" id="m1-cell-alpha-val">0.90</span>
+              </label>
               <input type="range" class="form-range" id="m1-cell-alpha" min="0.05" max="1" step="0.05" value="0.9">
             </div>
           </div>
@@ -110,7 +119,10 @@
             <button id="m1-render" class="btn btn-primary btn-sm flex-grow-1">
               <i class="fas fa-sync-alt me-1"></i>Render
             </button>
-            <button id="m1-reset" class="btn btn-outline-secondary btn-sm" title="Reset filters">
+            <button id="m1-select-all" class="btn btn-outline-secondary btn-sm" title="Select all sender + receiver cell types">
+              <i class="fas fa-check-double"></i>
+            </button>
+            <button id="m1-reset" class="btn btn-outline-secondary btn-sm" title="Reset to defaults">
               <i class="fas fa-undo"></i>
             </button>
           </div>
@@ -135,9 +147,45 @@
             </div>
           </div>
           <p class="small text-muted mt-2 mb-0">
-            Pan: drag · Zoom: scroll or box-select · Hover for cell / edge details. The
-            colorbar at the bottom shows MI strength for visible edges.
+            Controls auto-apply as you change them. Pan: drag · Zoom: scroll or box-select · Hover for cell / edge details.
+            Colorbar shows MI strength for visible edges.
           </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cell-type interaction summary (chord/circle plots) -->
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card position-relative">
+        <div class="card-body">
+          <div class="d-flex align-items-center mb-2">
+            <h2 class="h5 mb-0 me-3">
+              <i class="fas fa-circle-nodes text-primary me-2"></i>
+              Cell-type interaction summary <span class="text-muted small ms-1" id="m1-circle-mi"></span>
+            </h2>
+          </div>
+          <p class="small text-muted mb-3">
+            Mean MI strength between every directed (sender → receiver) cell-type pair.
+            Pairs above 50% of the per-figure max are shown; loops indicate same-type interactions.
+          </p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="text-muted small mb-1" id="m1-circle-all-title">All slices · cell-type interaction summary</div>
+              <div id="m1-circle-all" style="min-height: 420px;"></div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1" id="m1-circle-slice-title">Current slice · cell-type interaction summary</div>
+              <div id="m1-circle-slice" style="min-height: 420px;"></div>
+            </div>
+          </div>
+          <div id="m1-circle-spinner" class="m1-spinner-overlay">
+            <div class="text-center">
+              <div class="spinner-border" role="status"></div>
+              <div class="small mt-2">Computing interaction summary…</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

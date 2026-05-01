@@ -1339,3 +1339,296 @@ def build_loadings_figures(
             "table": receiver_df.to_dict(orient="records"),
         },
     }
+
+
+# ============================================================================
+# Circle / chord cell-type interaction summary (notebook cell 5)
+# ============================================================================
+#
+# Two summary plots: one aggregating across all slices ("slice_mean_then_average"
+# — per-slice mean MI strength, then average across slices), and one for the
+# currently-selected slice. Both filter to edges with positive MI and to pairs
+# above 50% of the per-figure max.
+# ============================================================================
+
+import math as _math
+
+
+def _summarize_interactions_by_celltype(
+    edge_df: pd.DataFrame, mi_name: str, all_celltypes: list[str], agg: str = "mean"
+) -> pd.DataFrame:
+    """Mean (or per-slice-mean-then-averaged) MI strength per (sender, receiver) pair."""
+    if mi_name not in edge_df.columns:
+        return pd.DataFrame(columns=["sender_celltype", "receiver_celltype", "value"])
+
+    needed = ["sender_celltype", "receiver_celltype", mi_name]
+    if agg == "slice_mean_then_average":
+        if "slice_index" not in edge_df.columns:
+            raise ValueError("agg='slice_mean_then_average' requires a slice_index column.")
+        needed = needed + ["slice_index"]
+
+    df = edge_df[needed].copy()
+    vals = df[mi_name].to_numpy(dtype=float)
+    df = df.loc[np.isfinite(vals) & (vals > 0)].copy()
+    if df.shape[0] == 0:
+        return pd.DataFrame(columns=["sender_celltype", "receiver_celltype", "value"])
+
+    if agg == "mean":
+        summary = df.groupby(["sender_celltype", "receiver_celltype"], as_index=False)[mi_name].mean()
+    elif agg == "sum":
+        summary = df.groupby(["sender_celltype", "receiver_celltype"], as_index=False)[mi_name].sum()
+    elif agg == "slice_mean_then_average":
+        slice_means = df.groupby(
+            ["slice_index", "sender_celltype", "receiver_celltype"], as_index=False
+        )[mi_name].mean()
+        unique_slices = sorted(pd.unique(df["slice_index"]))
+        unique_senders = sorted(pd.unique(df["sender_celltype"]))
+        unique_receivers = sorted(pd.unique(df["receiver_celltype"]))
+        idx = pd.MultiIndex.from_product(
+            [unique_slices, unique_senders, unique_receivers],
+            names=["slice_index", "sender_celltype", "receiver_celltype"],
+        )
+        slice_means = (
+            slice_means.set_index(["slice_index", "sender_celltype", "receiver_celltype"])
+            .reindex(idx, fill_value=0.0).reset_index()
+        )
+        summary = slice_means.groupby(
+            ["sender_celltype", "receiver_celltype"], as_index=False
+        )[mi_name].mean()
+    else:
+        raise ValueError("agg must be 'mean', 'sum', or 'slice_mean_then_average'")
+
+    summary = summary.rename(columns={mi_name: "value"})
+    sender_cat = pd.Categorical(summary["sender_celltype"], categories=all_celltypes, ordered=True)
+    receiver_cat = pd.Categorical(summary["receiver_celltype"], categories=all_celltypes, ordered=True)
+    summary = (
+        summary.assign(_sc=sender_cat, _rc=receiver_cat)
+        .sort_values(["_sc", "_rc", "value"], ascending=[True, True, False])
+        .drop(columns=["_sc", "_rc"])
+        .reset_index(drop=True)
+    )
+    return summary
+
+
+def _filter_summary_by_relative(summary_df: pd.DataFrame, relative_threshold: float = 0.50) -> pd.DataFrame:
+    if summary_df is None or summary_df.shape[0] == 0:
+        return summary_df
+    vals = summary_df["value"].to_numpy(dtype=float)
+    vals = vals[np.isfinite(vals)]
+    if vals.size == 0:
+        return summary_df.iloc[0:0, :].copy()
+    cutoff = float(vals.max()) * float(relative_threshold)
+    out = summary_df.loc[summary_df["value"].to_numpy(dtype=float) > cutoff].copy()
+    if out.shape[0] == 0:
+        out = summary_df.nlargest(1, "value").copy()
+    return out
+
+
+def _circle_loop_points(x0: float, y0: float, radius: float = 0.16, n_points: int = 50):
+    phi = _math.atan2(y0, x0)
+    cx = x0 + 0.18 * _math.cos(phi)
+    cy = y0 + 0.18 * _math.sin(phi)
+    theta = np.linspace(phi - 1.0, phi + 1.9, n_points)
+    return cx + radius * np.cos(theta), cy + radius * np.sin(theta)
+
+
+def _circle_quadratic_points(x0, y0, x1, y1, bend: float = 0.22, n_points: int = 60):
+    mx = 0.5 * (x0 + x1); my = 0.5 * (y0 + y1)
+    cx = mx * bend; cy = my * bend
+    t = np.linspace(0.0, 1.0, n_points)
+    x = (1 - t) ** 2 * x0 + 2 * (1 - t) * t * cx + t ** 2 * x1
+    y = (1 - t) ** 2 * y0 + 2 * (1 - t) * t * cy + t ** 2 * y1
+    return x, y
+
+
+def _circle_arrow_segment(x_curve, y_curve, sender: str, receiver: str):
+    if len(x_curve) < 6:
+        return None
+    head_idx = len(x_curve) - 2
+    tail_idx = max(0, head_idx - (5 if sender == receiver else 6))
+    return float(x_curve[tail_idx]), float(y_curve[tail_idx]), float(x_curve[head_idx]), float(y_curve[head_idx])
+
+
+def _make_circle_figure(summary_df: pd.DataFrame, palette: dict[str, str],
+                         theme_mode: str = "dark", height: int = 420) -> dict:
+    """Build the chord/circle Plotly figure as JSON-serializable dict."""
+    spec = theme_spec(theme_mode)
+    celltypes = sorted(palette.keys())
+    n = len(celltypes)
+    if n == 0:
+        return _empty_message_figure("No cell types available.", theme_mode, height)
+    if summary_df is None or summary_df.shape[0] == 0:
+        return _empty_message_figure("No positive MI interactions.", theme_mode, height)
+
+    angles = np.linspace(np.pi / 2.0, np.pi / 2.0 - 2.0 * np.pi, n, endpoint=False)
+    node_pos = {ct: (np.cos(t), np.sin(t)) for ct, t in zip(celltypes, angles)}
+
+    node_strength = {ct: 0.0 for ct in celltypes}
+    for _, row in summary_df.iterrows():
+        node_strength[row["sender_celltype"]] = node_strength.get(row["sender_celltype"], 0.0) + float(row["value"])
+        node_strength[row["receiver_celltype"]] = node_strength.get(row["receiver_celltype"], 0.0) + float(row["value"])
+
+    node_values = np.array([node_strength.get(ct, 0.0) for ct in celltypes], dtype=float)
+    if np.max(node_values) > 0:
+        node_sizes = 18 + 16 * (node_values / np.max(node_values))
+    else:
+        node_sizes = np.full(n, 18.0)
+
+    vmax = max(float(summary_df["value"].max()), 1e-8)
+    fig = go.Figure()
+    edge_df = summary_df.sort_values("value", ascending=False)
+
+    for _, row in edge_df.iterrows():
+        sender = str(row["sender_celltype"]); receiver = str(row["receiver_celltype"])
+        if sender not in node_pos or receiver not in node_pos:
+            continue
+        value = float(row["value"])
+        x0, y0 = node_pos[sender]; x1, y1 = node_pos[receiver]
+
+        if sender == receiver:
+            xc, yc = _circle_loop_points(x0, y0)
+        else:
+            xc, yc = _circle_quadratic_points(x0, y0, x1, y1)
+
+        scale = value / vmax
+        edge_color = hex_to_rgba(palette.get(sender, "#999999"), 0.22 + 0.64 * scale)
+        edge_width = 1.3 + 6.4 * scale
+
+        fig.add_trace(go.Scatter(
+            x=xc, y=yc, mode="lines", showlegend=False,
+            hovertemplate=f"<b>{sender} → {receiver}</b><br>Mean MI strength: {value:.4f}<extra></extra>",
+            line=dict(color=edge_color, width=edge_width),
+        ))
+
+        seg = _circle_arrow_segment(xc, yc, sender, receiver)
+        if seg is not None:
+            ax0, ay0, ax1, ay1 = seg
+            fig.add_annotation(
+                x=ax1, y=ay1, ax=ax0, ay=ay0,
+                xref="x", yref="y", axref="x", ayref="y",
+                text="", showarrow=True, arrowhead=3, arrowside="end",
+                arrowsize=(1.35 + 0.55 * scale) * 0.5,
+                arrowwidth=max(1.0, edge_width * 0.95),
+                arrowcolor=edge_color,
+                opacity=min(1.0, 0.42 + 0.50 * scale),
+            )
+
+    label_radius = 1.24
+    node_x = [node_pos[ct][0] for ct in celltypes]
+    node_y = [node_pos[ct][1] for ct in celltypes]
+    label_x = [label_radius * np.cos(t) for t in angles]
+    label_y = [label_radius * np.sin(t) for t in angles]
+
+    fig.add_trace(go.Scatter(
+        x=node_x, y=node_y, mode="markers", showlegend=False,
+        hovertemplate="<b>%{customdata[0]}</b><br>Total summary weight: %{customdata[1]:.4f}<extra></extra>",
+        customdata=np.column_stack([celltypes, node_values]),
+        marker=dict(
+            size=node_sizes.tolist(),
+            color=[palette[ct] for ct in celltypes],
+            line=dict(color=spec["border_solid"], width=1.1),
+        ),
+    ))
+    fig.add_trace(go.Scatter(
+        x=label_x, y=label_y, mode="text", text=celltypes,
+        showlegend=False, hoverinfo="skip",
+        textfont=dict(size=13, color=spec["text"]),
+    ))
+
+    fig.update_layout(
+        height=int(height),
+        margin=dict(l=8, r=8, t=8, b=8),
+        paper_bgcolor=spec["bg"], plot_bgcolor=spec["bg"],
+        font=dict(size=13, color=spec["text"]),
+        xaxis=dict(visible=False, range=[-1.48, 1.48]),
+        yaxis=dict(visible=False, range=[-1.38, 1.38], scaleanchor="x", scaleratio=1),
+    )
+    out = json.loads(fig.to_json(validate=False))
+    out["layout"]["template"] = None
+    return out
+
+
+def _empty_message_figure(message: str, theme_mode: str = "dark", height: int = 240) -> dict:
+    spec = theme_spec(theme_mode)
+    fig = go.Figure()
+    fig.add_annotation(
+        x=0.5, y=0.5, xref="paper", yref="paper",
+        text=str(message), showarrow=False,
+        font=dict(size=14, color=spec["text"]), align="center",
+    )
+    fig.update_xaxes(visible=False); fig.update_yaxes(visible=False)
+    fig.update_layout(
+        height=int(height), paper_bgcolor=spec["bg"], plot_bgcolor=spec["bg"],
+        margin=dict(l=20, r=20, t=20, b=20),
+    )
+    out = json.loads(fig.to_json(validate=False))
+    out["layout"]["template"] = None
+    return out
+
+
+# ----- All-slice edge cache (lazy) -------------------------------------------
+
+_ALL_EDGES_CACHE: dict[str, pd.DataFrame] = {}
+_ALL_EDGES_LOCK = Lock()
+
+
+def _all_slice_edges_minimal(ds: DatasetPaths) -> pd.DataFrame:
+    """Return a stacked frame with sender_celltype, receiver_celltype, slice_index,
+    and all MI-* columns for every slice. Cached per dataset."""
+    with _ALL_EDGES_LOCK:
+        cached = _ALL_EDGES_CACHE.get(ds.name)
+        if cached is not None:
+            return cached
+        summary = load_dataset_summary(ds)
+        n_slices = len(summary.get("slices", []))
+        mi_cols = mi_columns(ds.dim_envir)
+        keep_cols = ["sender_celltype", "receiver_celltype"] + mi_cols
+        frames: list[pd.DataFrame] = []
+        for i in range(n_slices):
+            tables = load_slice(ds, i)
+            cols = [c for c in keep_cols if c in tables.edges.columns]
+            sub = tables.edges[cols].copy()
+            sub["slice_index"] = int(i)
+            frames.append(sub)
+        all_edges = pd.concat(frames, ignore_index=True) if frames else pd.DataFrame(columns=keep_cols + ["slice_index"])
+        _ALL_EDGES_CACHE[ds.name] = all_edges
+        return all_edges
+
+
+def build_circle_summary_response(
+    ds: DatasetPaths, slice_idx: int, mi_idx: int, theme_mode: str = "dark",
+) -> dict:
+    """Return both circle figures (all-slices and per-slice) for a given MI."""
+    mi_name = mi_columns(ds.dim_envir)[int(mi_idx)]
+    palette = load_palette(ds)
+    all_celltypes = sorted(palette.keys())
+
+    # All-slices: one row per slice mean, then averaged.
+    all_edges = _all_slice_edges_minimal(ds)
+    all_summary = _summarize_interactions_by_celltype(
+        all_edges, mi_name=mi_name, all_celltypes=all_celltypes,
+        agg="slice_mean_then_average",
+    )
+    all_summary = _filter_summary_by_relative(all_summary, relative_threshold=0.50)
+
+    # Per-slice: simple mean.
+    tables = load_slice(ds, int(slice_idx))
+    slice_summary = _summarize_interactions_by_celltype(
+        tables.edges, mi_name=mi_name, all_celltypes=all_celltypes, agg="mean",
+    )
+    slice_summary = _filter_summary_by_relative(slice_summary, relative_threshold=0.50)
+
+    summary = load_dataset_summary(ds)
+    slice_label = f"slice {int(slice_idx):03d}"
+    sample_names = summary.get("slices", [{}])[int(slice_idx)].get("sample_names") or []
+    if sample_names:
+        slice_label = f"{slice_label} ({sample_names[0]})"
+
+    return {
+        "mi_name": mi_name,
+        "slice_label": slice_label,
+        "all_figure": _make_circle_figure(all_summary, palette, theme_mode=theme_mode, height=420),
+        "slice_figure": _make_circle_figure(slice_summary, palette, theme_mode=theme_mode, height=420),
+        "all_title": f"All slices · cell-type interaction summary · {mi_name}",
+        "slice_title": f"{slice_label} · cell-type interaction summary · {mi_name}",
+    }

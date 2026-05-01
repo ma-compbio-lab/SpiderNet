@@ -22,5 +22,7 @@ echo ""
 echo "Press Ctrl+C to stop the server"
 echo ""
 
-# Run Flask app
-python app.py
+# Run Flask app with unbuffered stdout so progress logs from the modules
+# (e.g. "[m2] Building embedding store...") appear in real time instead of
+# sitting in Python's default block buffer until the process exits.
+PYTHONUNBUFFERED=1 python -u app.py

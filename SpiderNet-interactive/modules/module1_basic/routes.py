@@ -133,6 +133,27 @@ def api_loadings(dataset_name: str):
         return jsonify({"error": f"{type(e).__name__}: {e}"}), 500
 
 
+@bp.route("/api/circle-summary", methods=["POST"])
+def api_circle_summary(dataset_name: str):
+    """Return both cell-type interaction summary plots — across all slices
+    (slice-mean-then-averaged) and for the currently selected slice."""
+    ds = _resolve(dataset_name)
+    payload = request.get_json(silent=True) or {}
+    try:
+        slice_idx = int(payload.get("slice_idx", 0))
+        mi_idx = int(payload.get("mi_idx", 0))
+    except (TypeError, ValueError):
+        return jsonify({"error": "slice_idx and mi_idx must be integers"}), 400
+    theme_mode = str(payload.get("theme", "dark"))
+    try:
+        return jsonify(service.build_circle_summary_response(
+            ds=ds, slice_idx=slice_idx, mi_idx=mi_idx, theme_mode=theme_mode,
+        ))
+    except Exception as e:
+        current_app.logger.exception("circle-summary build failed")
+        return jsonify({"error": f"{type(e).__name__}: {e}"}), 500
+
+
 @bp.route("/api/threshold-default", methods=["GET"])
 def api_threshold_default(dataset_name: str):
     """Return (vmin, vmax, q90) for the chosen (slice, MI) so the UI can

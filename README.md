@@ -259,15 +259,16 @@ This project is distributed under the MIT License.
 
 SpiderNet ships with **SpiderNet-Interactive**, a local Flask web app for interactively exploring trained SpiderNet runs in the browser. Four interconnected modules drive directly off the trained model and processed data — no static plots, every figure is rendered live from the cached run.
 
-### Quick start
+### Installation
 
-From the repository root, install the UI dependencies first:
+The web app reuses the SpiderNet environment. PyTorch + PyTorch Geometric (and the SpiderNet package itself) must already be installed via the steps above; then add the web-app extras on top from the repository root:
 
 ```bash
+conda activate SpiderNet_env             # the env you used for SpiderNet
 pip install -r requirements-UI.txt
 ```
 
-Then start the local web app:
+### Quick start
 
 ```bash
 cd SpiderNet-interactive

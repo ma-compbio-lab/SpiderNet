@@ -585,16 +585,17 @@ def _heatmap_figure(df: pd.DataFrame, title: str, theme: dict) -> dict:
                           xaxis=dict(visible=False), yaxis=dict(visible=False),
                           height=320)
         return _to_plotly_json(fig)
+    y_labels = [f"Cluster-{c}" for c in df.index.astype(str).tolist()]
     fig = go.Figure(go.Heatmap(
         z=df.values.astype(float).tolist(),
         x=df.columns.astype(str).tolist(),
-        y=df.index.astype(str).tolist(),
+        y=y_labels,
         colorscale="Viridis",
         colorbar=dict(title=dict(text="Mean", font=dict(color=theme["text"], size=11)),
                       tickfont=dict(color=theme["text"], size=10),
                       outlinecolor=theme["text"], outlinewidth=1.0),
         xgap=0.5, ygap=0.5,
-        hovertemplate="Cluster %{y}<br>%{x}<br>Mean MI: %{z:.3f}<extra></extra>",
+        hovertemplate="%{y}<br>%{x}<br>Mean MI: %{z:.3f}<extra></extra>",
     ))
     fig.update_layout(
         title=dict(text=title, font=dict(color=theme["text"], size=12)),
@@ -615,11 +616,11 @@ def build_cluster_heatmaps(result: SubtypeResult, theme_mode: str = "dark") -> t
     return sender, receiver
 
 
-def build_full_response(result: SubtypeResult, theme_mode: str = "dark") -> dict:
+def build_full_response(result: SubtypeResult, theme_mode: str = "dark", marker_size: float = 4.0) -> dict:
     sender_fig, receiver_fig = build_cluster_heatmaps(result, theme_mode=theme_mode)
     return {
         "cache_key": result.cache_key,
-        "umap_figure": build_umap_figure(result, theme_mode=theme_mode),
+        "umap_figure": build_umap_figure(result, theme_mode=theme_mode, marker_size=marker_size),
         "cluster_size_figure": build_cluster_size_figure(result, theme_mode=theme_mode),
         "sender_heatmap_figure": sender_fig,
         "receiver_heatmap_figure": receiver_fig,

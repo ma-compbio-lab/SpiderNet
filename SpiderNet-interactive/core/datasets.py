@@ -2,7 +2,7 @@
 Dataset discovery for the V2 *_UI layout.
 
 A dataset is any directory of the form `<Name>_UI/` that contains:
-  - ProcessedData/                     (adata_list.pkl, SpiderNet_data_pyg_list.pkl, ...)
+  - ProcessedData/                     (adata_list.pkl, SpiderNet_data_pyg_list.{pkl,pt}, ...)
   - <VERSION>/SpiderNet_Result_dim*/   (Factor_envir_list.pkl, loading_*.npy, Model/)
   - <Name>_modeltraining_setup.json    (DIM_ENVIR, VERSION, SPECIES)
   - config.json                        (CELL_TYPE_COL, SAMPLE_ID_COL, SPATIAL_KEY, ...)
