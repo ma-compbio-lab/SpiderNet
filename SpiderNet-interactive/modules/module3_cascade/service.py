@@ -395,11 +395,30 @@ def _cluster_linkage(matrix: np.ndarray) -> tuple[np.ndarray, list[int]]:
 
 
 def _dendro_traces(Z: Optional[np.ndarray], orientation: str, theme: dict) -> list[go.Scatter]:
+    """Build dendrogram traces aligned to the heatmap's integer leaf indices.
+
+    scipy's `dendrogram` returns icoord = leaf-axis coordinates (leaves at
+    5, 15, 25, … in conventional units) and dcoord = depth-axis coordinates.
+    For top/bottom orientations the leaves run along x; for left/right
+    orientations the leaves run along y. Two adjustments matter:
+
+      1. Map icoord/dcoord onto x/y based on orientation, so the tree's
+         branches grow perpendicular to the heatmap's matching axis.
+      2. Rescale icoord from scipy's `5 + 10*i` convention to the integer
+         leaf indices (0, 1, 2, …) that Plotly uses for category axes,
+         so the dendrogram leaves line up with the heatmap rows/columns.
+    """
     if Z is None:
         return []
     dendro = dendrogram(Z, orientation=orientation, no_plot=True, color_threshold=-1)
+    is_horizontal = orientation in ("left", "right")
     traces = []
-    for xs, ys in zip(dendro["icoord"], dendro["dcoord"]):
+    for icoord, dcoord in zip(dendro["icoord"], dendro["dcoord"]):
+        leaf_pos = [(c - 5.0) / 10.0 for c in icoord]    # 5,15,25 -> 0,1,2
+        if is_horizontal:
+            xs, ys = dcoord, leaf_pos
+        else:
+            xs, ys = leaf_pos, dcoord
         traces.append(go.Scatter(
             x=xs, y=ys, mode="lines", showlegend=False, hoverinfo="skip",
             line=dict(color=theme["text"], width=1.0),
@@ -438,16 +457,20 @@ def build_heatmap_figure(payload: dict[str, Any], theme_mode: str = "dark") -> d
         rows=2, cols=2,
         column_widths=[0.13, 0.87],
         row_heights=[0.13, 0.87],
-        horizontal_spacing=0.005,
-        vertical_spacing=0.01,
+        horizontal_spacing=0.08,           # gap so dendrogram doesn't kiss labels
+        vertical_spacing=0.015,
+        shared_xaxes=False,
+        shared_yaxes=False,
         specs=[[{"type": "scatter"}, {"type": "scatter"}],
                [{"type": "scatter"}, {"type": "heatmap"}]],
     )
-    # column dendrogram (top right)
+    # column dendrogram (top right) — branches grow downward toward heatmap
     for tr in _dendro_traces(Z_col, "top", theme):
         fig.add_trace(tr, row=1, col=2)
-    # row dendrogram (bottom left)
-    for tr in _dendro_traces(Z_row, "left", theme):
+    # row dendrogram (bottom left) — branches grow rightward toward heatmap.
+    # We use `orientation="right"` so the trunk sits on the left of its
+    # subplot and the leaves on the right (next to the heatmap labels).
+    for tr in _dendro_traces(Z_row, "right", theme):
         fig.add_trace(tr, row=2, col=1)
 
     # heatmap
@@ -490,18 +513,31 @@ def build_heatmap_figure(payload: dict[str, Any], theme_mode: str = "dark") -> d
         margin=dict(l=10, r=20, t=10, b=80),
         showlegend=False,
     )
-    # hide dendrogram axes
-    for ax in ("xaxis", "xaxis2", "yaxis", "yaxis2", "yaxis3", "xaxis3"):
+    # Hide all dendrogram-subplot axes (ticks, gridlines, labels).
+    for ax in ("xaxis", "xaxis2", "xaxis3", "yaxis", "yaxis2", "yaxis3"):
         if ax in fig.layout:
             try:
                 fig.layout[ax].update(showgrid=False, zeroline=False, showticklabels=False, ticks="")
             except Exception:
                 pass
-    # heatmap axes (xaxis4, yaxis4 in the subplot grid)
+    # Heatmap axes (xaxis4, yaxis4 in the 2x2 subplot grid).
     fig.update_xaxes(showticklabels=True, tickangle=55, color=theme["text"],
                      showgrid=False, automargin=True, row=2, col=2)
     fig.update_yaxes(showticklabels=True, color=theme["text"],
                      autorange="reversed", showgrid=False, automargin=True, row=2, col=2)
+
+    # Match the row-dendrogram's y-range to the heatmap's leaf positions
+    # (0..n-1, reversed because heatmap autorange is reversed). This is what
+    # actually makes the branches line up with the rows.
+    fig.update_yaxes(range=[n_mi - 0.5, -0.5], row=2, col=1)
+    # scipy returns leaf depths at dcoord=0 and the trunk at max depth. By
+    # default Plotly puts 0 on the left → leaves end up on the wrong side.
+    # Reverse the row-dendrogram x-axis so dcoord=0 (leaves) sits on the
+    # right edge, adjacent to the heatmap's y-axis labels.
+    fig.update_xaxes(autorange="reversed", row=2, col=1)
+    # Match the column-dendrogram's x-range to the heatmap's column positions.
+    n_col = len(col_labels)
+    fig.update_xaxes(range=[-0.5, n_col - 0.5], row=1, col=2)
     return _to_plotly_json(fig)
 
 

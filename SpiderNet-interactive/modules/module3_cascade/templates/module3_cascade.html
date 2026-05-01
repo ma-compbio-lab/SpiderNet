@@ -21,6 +21,45 @@
     backdrop-filter: blur(2px);
   }
   .m3-spinner-overlay.active { display: flex; }
+
+  /* Cascade schematic panels: titled card + dashed box with a 3-node SVG. */
+  .m3-schematic-card { display: flex; flex-direction: column; gap: 0.45rem; }
+  .m3-schematic-title {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fg-muted);
+    font-weight: 600;
+  }
+  .m3-schematic-box {
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
+    min-height: 148px;
+    background: color-mix(in oklab, var(--fg) 4%, transparent);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .m3-schematic-box svg { width: 100%; height: auto; display: block; }
+  .m3-schematic-empty {
+    font-size: var(--text-xs);
+    color: var(--fg-subtle);
+    line-height: 1.45;
+    text-align: center;
+  }
+
+  /* In-situ panel: tighten slider styling and prevent value labels from
+     pushing labels around on long values. */
+  .m3-insitu-sliders .form-range { padding: 0; margin-top: 2px; }
+  .m3-insitu-sliders label { gap: 0.5em; }
+  .m3-insitu-sliders label > span:last-child { font-variant-numeric: tabular-nums; }
+  /* On wide layouts, give the Render button breathing room from the trailing slider. */
+  @media (min-width: 992px) {
+    .m3-insitu-sliders .col-lg-auto { padding-left: var(--space-md); }
+    .m3-insitu-sliders .btn { min-width: 7rem; }
+  }
 </style>
 {% endblock %}
 
@@ -138,33 +177,74 @@
     <div class="col-12">
       <div class="card position-relative">
         <div class="card-body">
-          <div class="d-flex flex-wrap align-items-end gap-2 mb-2">
+          <div class="d-flex flex-wrap align-items-end gap-2 mb-3">
             <h2 class="h5 mb-0 me-3">
               <i class="fas fa-map-marker-alt text-primary me-2"></i>
               In-situ cascade rendering
             </h2>
             <div>
-              <label for="m3-insitu-cell1" class="small text-muted mb-0">Cell1</label>
-              <select id="m3-insitu-cell1" class="form-select form-select-sm" style="min-width: 8rem"></select>
+              <label for="m3-insitu-mi-up" class="small text-muted mb-0">Upstream MI</label>
+              <select id="m3-insitu-mi-up" class="form-select form-select-sm" style="min-width: 6.5rem"></select>
             </div>
             <div>
-              <label for="m3-insitu-cell2" class="small text-muted mb-0">Cell2</label>
-              <select id="m3-insitu-cell2" class="form-select form-select-sm" style="min-width: 8rem"></select>
+              <label for="m3-insitu-mi-down" class="small text-muted mb-0">Downstream MI</label>
+              <select id="m3-insitu-mi-down" class="form-select form-select-sm" style="min-width: 6.5rem"></select>
             </div>
-            <div>
-              <label for="m3-insitu-cell3" class="small text-muted mb-0">Cell3</label>
-              <select id="m3-insitu-cell3" class="form-select form-select-sm" style="min-width: 8rem"></select>
+          </div>
+          {# --- Row 1: categorical selectors (Cell1/2/3, Slice) -------------- #}
+          <div class="row g-3 mb-3 m3-insitu-selectors">
+            <div class="col-6 col-md-3">
+              <label for="m3-insitu-cell1" class="small text-muted mb-1">Cell1</label>
+              <select id="m3-insitu-cell1" class="form-select form-select-sm w-100"></select>
             </div>
-            <div>
-              <label for="m3-insitu-slice" class="small text-muted mb-0">Slice</label>
-              <select id="m3-insitu-slice" class="form-select form-select-sm" style="min-width: 7rem"></select>
+            <div class="col-6 col-md-3">
+              <label for="m3-insitu-cell2" class="small text-muted mb-1">Cell2</label>
+              <select id="m3-insitu-cell2" class="form-select form-select-sm w-100"></select>
             </div>
-            <div>
-              <label for="m3-insitu-mi-thr" class="small text-muted mb-0">MI thr</label>
-              <input type="number" id="m3-insitu-mi-thr" class="form-control form-control-sm" value="0.6" min="0" max="1" step="0.01" style="width: 5rem">
+            <div class="col-6 col-md-3">
+              <label for="m3-insitu-cell3" class="small text-muted mb-1">Cell3</label>
+              <select id="m3-insitu-cell3" class="form-select form-select-sm w-100"></select>
             </div>
-            <div class="ms-auto">
-              <button id="m3-insitu-run" class="btn btn-primary btn-sm" disabled>
+            <div class="col-6 col-md-3">
+              <label for="m3-insitu-slice" class="small text-muted mb-1">Slice</label>
+              <select id="m3-insitu-slice" class="form-select form-select-sm w-100"></select>
+            </div>
+          </div>
+
+          {# --- Row 2: continuous sliders + Render button ------------------ #}
+          <div class="row g-3 align-items-end mb-3 m3-insitu-sliders">
+            <div class="col-6 col-lg">
+              <label for="m3-insitu-mi-thr" class="small text-muted mb-1 d-flex justify-content-between">
+                <span>MI thr</span><span class="font-monospace" id="m3-insitu-mi-thr-val">0.60</span>
+              </label>
+              <input type="range" id="m3-insitu-mi-thr" class="form-range" value="0.6" min="0" max="1" step="0.01">
+            </div>
+            <div class="col-6 col-lg">
+              <label for="m3-insitu-cell-size" class="small text-muted mb-1 d-flex justify-content-between">
+                <span>Cell size</span><span class="font-monospace" id="m3-insitu-cell-size-val">6.0</span>
+              </label>
+              <input type="range" id="m3-insitu-cell-size" class="form-range" value="6" min="1" max="20" step="0.5">
+            </div>
+            <div class="col-6 col-lg">
+              <label for="m3-insitu-cell-alpha" class="small text-muted mb-1 d-flex justify-content-between">
+                <span>Cell alpha</span><span class="font-monospace" id="m3-insitu-cell-alpha-val">0.82</span>
+              </label>
+              <input type="range" id="m3-insitu-cell-alpha" class="form-range" value="0.82" min="0.05" max="1" step="0.05">
+            </div>
+            <div class="col-6 col-lg">
+              <label for="m3-insitu-edge-width" class="small text-muted mb-1 d-flex justify-content-between">
+                <span>Edge width</span><span class="font-monospace" id="m3-insitu-edge-width-val">1.2</span>
+              </label>
+              <input type="range" id="m3-insitu-edge-width" class="form-range" value="1.2" min="0.2" max="6" step="0.1">
+            </div>
+            <div class="col-6 col-lg">
+              <label for="m3-insitu-arrow-size" class="small text-muted mb-1 d-flex justify-content-between">
+                <span>Arrow size</span><span class="font-monospace" id="m3-insitu-arrow-size-val">0.55</span>
+              </label>
+              <input type="range" id="m3-insitu-arrow-size" class="form-range" value="0.55" min="0.1" max="2" step="0.05">
+            </div>
+            <div class="col-12 col-lg-auto">
+              <button id="m3-insitu-run" class="btn btn-primary btn-sm w-100 w-lg-auto" disabled>
                 <i class="fas fa-play me-1"></i>Render
               </button>
             </div>
@@ -232,6 +312,33 @@
             chosen above (with interest cells excluded). Welch t-test on log1p
             counts; BH adjustment; Enrichr GO_BP.
           </p>
+
+          {# --- Cascade schematics --------------------------------------- #}
+          <div class="row g-3 mb-3 m3-deg-schematics">
+            <div class="col-md-6">
+              <div class="m3-schematic-card">
+                <div class="m3-schematic-title">Current cascade of interest</div>
+                <div id="m3-deg-interest-schematic" class="m3-schematic-box">
+                  <div class="m3-schematic-empty">
+                    Select a significant MI pair and a (cell1 → cell2 → cell3) triple in the
+                    in-situ panel above to preview the cascade of interest.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="m3-schematic-card">
+                <div class="m3-schematic-title">Baseline cascade triplet structure</div>
+                <div id="m3-deg-baseline-schematic" class="m3-schematic-box">
+                  <div class="m3-schematic-empty">
+                    Inactive upstream / downstream selections remove the corresponding edge
+                    from the schematic.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div id="m3-deg-status" class="small text-muted mb-2"></div>
           <div class="row g-2">
             <div class="col-md-4"><div id="m3-deg-pos1-volcano" style="min-height: 380px;"></div></div>

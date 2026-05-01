@@ -81,7 +81,33 @@ def api_run(dataset_name: str):
         current_app.logger.exception("subtype analysis failed")
         return jsonify({"error": f"{type(e).__name__}: {e}"}), 500
 
-    return jsonify(service.build_full_response(result, theme_mode=str(payload.get("theme", "dark"))))
+    return jsonify(service.build_full_response(
+        result,
+        theme_mode=str(payload.get("theme", "dark")),
+        marker_size=float(payload.get("marker_size", 4.0)),
+    ))
+
+
+@bp.route("/api/umap-restyle", methods=["POST"])
+def api_umap_restyle(dataset_name: str):
+    """Cheap re-render of just the UMAP figure with a new marker size / theme,
+    using a cached run. No re-clustering."""
+    ds = _resolve(dataset_name)
+    _ = ds  # dataset isn't actually needed once we have the cached result
+    payload = request.get_json(silent=True) or {}
+    cache_key = payload.get("cache_key")
+    if not cache_key or not isinstance(cache_key, str):
+        return jsonify({"error": "cache_key from /api/run is required"}), 400
+    result = service.get_cached_run(cache_key)
+    if result is None:
+        return jsonify({"error": "no cached run for this cache_key (re-run /api/run)"}), 410
+    return jsonify({
+        "umap_figure": service.build_umap_figure(
+            result,
+            theme_mode=str(payload.get("theme", "dark")),
+            marker_size=float(payload.get("marker_size", 4.0)),
+        ),
+    })
 
 
 @bp.route("/api/deg", methods=["POST"])

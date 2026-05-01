@@ -52,9 +52,11 @@
 
 /* ----- Light theme -----
    Hue 250 (cool, slightly bluish, anchored on the brand accent).
-   Neutrals tinted toward 250 with low chroma so surfaces feel cohesive. */
+   Neutrals tinted toward 250 with low chroma so surfaces feel cohesive.
+   `:root` defines the default; `:root[data-theme="light"]` lifts specificity
+   above the dark override below so the toggle takes effect immediately. */
 :root,
-[data-theme="light"] {
+:root[data-theme="light"] {
     --bg:           oklch(99.2% 0.004 250);
     --bg-subtle:    oklch(97.5% 0.006 250);
     --bg-elevated:  oklch(100% 0 0);
@@ -95,8 +97,12 @@
     --grain-blend: multiply;
 }
 
-/* ----- Dark theme ----- */
-[data-theme="dark"] {
+/* ----- Dark theme -----
+   `:root[data-theme="dark"]` is `(0,2,0)`, beating the default `:root`
+   `(0,1,0)`. Without the `:root` prefix, dark would still win over light by
+   source order alone — but only because both are `(0,1,0)`. The explicit
+   prefix makes the precedence intentional rather than accidental. */
+:root[data-theme="dark"] {
     --bg:           oklch(16% 0.010 250);
     --bg-subtle:    oklch(20% 0.012 250);
     --bg-elevated:  oklch(22% 0.014 250);
@@ -417,7 +423,7 @@ hr {
 /* ----- Forms ----- */
 .form-control,
 .form-select {
-    background: var(--bg-elevated);
+    background-color: var(--bg-elevated);
     color: var(--fg);
     border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm);
@@ -426,9 +432,21 @@ hr {
     padding: 0.4rem 0.6rem;
     transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
 }
+
+/* Bootstrap's default form-select caret is a hardcoded dark-gray SVG that
+   looks broken on dark surfaces and disappears on tinted ones. Replace it
+   with one that uses the muted-foreground token so it adapts per theme. */
+.form-select {
+    --spn-caret-color: 156, 163, 175;     /* default fallback */
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><path fill='none' stroke='rgb(156,163,175)' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 0.55rem center;
+    background-size: 14px 12px;
+    padding-right: 1.85rem;
+}
 .form-control:focus,
 .form-select:focus {
-    background: var(--bg-elevated);
+    background-color: var(--bg-elevated);
     color: var(--fg);
     border-color: var(--accent);
     box-shadow: 0 0 0 3px var(--accent-tint);
@@ -454,19 +472,33 @@ hr {
 
 label, .form-label { color: var(--fg); }
 
-/* Dark mode select arrow */
-[data-theme="dark"] .form-select {
-    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23a8a8b3' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m2 5 6 6 6-6'/%3e%3c/svg%3e");
+/* The form-select caret defined above uses a neutral medium gray that reads
+   well on both themes — no per-theme override needed. */
+
+/* Make <option>s themeable. Browsers don't always inherit color/background
+   from the parent <select>, so set them explicitly. Multi-select listboxes
+   especially benefit, since otherwise the OS default styling shows up. */
+.form-select option,
+.form-control option {
+    background-color: var(--bg-elevated);
+    color: var(--fg);
+}
+.form-select[multiple] {
+    background-image: none;     /* no caret needed on multi-selects */
+    padding-right: 0.6rem;
 }
 
 /* ----- Tables ----- */
 .table {
     color: var(--fg);
+    --bs-table-color: var(--fg);
     --bs-table-bg: transparent;
     --bs-table-border-color: var(--border);
     --bs-table-striped-bg: var(--bg-subtle);
+    --bs-table-striped-color: var(--fg);
     --bs-table-hover-bg: var(--bg-subtle);
     --bs-table-hover-color: var(--fg);
+    --bs-emphasis-color: var(--fg);     /* Bootstrap 5.3 reads this for table text */
     border-color: var(--border);
 }
 .table > :not(caption) > * > * {
@@ -611,6 +643,15 @@ label, .form-label { color: var(--fg); }
 .navbar-toggler-icon {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 30 30'%3e%3cpath stroke='currentColor' stroke-linecap='round' stroke-miterlimit='10' stroke-width='2' d='M4 7h22M4 15h22M4 23h22'/%3e%3c/svg%3e");
 }
+
+/* Bootstrap's .dropdown-toggle::after is a CSS-drawn triangle that inherits
+   color from `border-color` of the surrounding element, which on dark mode
+   ends up rendering as a barely-visible v-shape. Force it to use --fg-muted. */
+.dropdown-toggle::after {
+    border-top-color: var(--fg-muted);
+    vertical-align: middle;
+}
+.dropdown-toggle:hover::after { border-top-color: var(--fg); }
 
 .dropdown-menu {
     background: var(--bg-elevated);

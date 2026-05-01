@@ -242,7 +242,9 @@
     thrValue.textContent = CURRENT_THRESHOLD.toFixed(3);
   });
 
+  let spatialInflight = 0;
   async function render() {
+    const reqId = ++spatialInflight;
     setSpinner(true);
     try {
       const payload = {
@@ -260,6 +262,7 @@
       };
       const t0 = performance.now();
       const result = await fetchSpatial(payload);
+      if (reqId !== spatialInflight) return;        // stale, skip
       const dt = ((performance.now() - t0) / 1000).toFixed(2);
       const fig = result.figure;
       Plotly.react(
@@ -272,13 +275,53 @@
       const trunc = result.meta.truncated ? " <span class='text-warning'>(truncated)</span>" : "";
       countsEl.innerHTML = `${result.meta.n_edges_visible.toLocaleString()} visible edges${trunc}`;
     } catch (err) {
-      setStatus(`Error: ${err.message}`);
+      if (reqId === spatialInflight) setStatus(`Error: ${err.message}`);
     } finally {
-      setSpinner(false);
+      if (reqId === spatialInflight) setSpinner(false);
     }
   }
 
+  // Debounced auto-render — every control change triggers a re-render after a
+  // short pause, so the user doesn't have to click "Render". The button still
+  // works as an explicit refresh.
+  let renderTimer = null;
+  function scheduleRender(delayMs = 180) {
+    clearTimeout(renderTimer);
+    renderTimer = setTimeout(render, delayMs);
+  }
+
   renderBtn.addEventListener("click", render);
+
+  // Live value labels for the sliders (decimal places match each slider's step).
+  function bindRangeLabel(input, label, decimals) {
+    if (!label) return;
+    const update = () => { label.textContent = parseFloat(input.value).toFixed(decimals); };
+    input.addEventListener("input", update);
+    update();
+  }
+  bindRangeLabel(markerSize, $("m1-marker-size-val"), 1);
+  bindRangeLabel(edgeWidth,  $("m1-edge-width-val"),  1);
+  bindRangeLabel(arrowSize,  $("m1-arrow-size-val"),  2);
+  bindRangeLabel(cellAlpha,  $("m1-cell-alpha-val"),  2);
+
+  // Max edges is still a number input; commit on `change`.
+  maxEdges.addEventListener("change", () => scheduleRender(80));
+  [senderSel, receiverSel].forEach((el) => {
+    el.addEventListener("change", () => scheduleRender(80));
+  });
+
+  // Range sliders fire `input` continuously while dragging — debounce harder
+  // so the server isn't flooded. The slider value-labels update on every
+  // input event for live feedback (handled above).
+  thrInput.addEventListener("input", () => scheduleRender(220));
+  cellAlpha.addEventListener("input", () => scheduleRender(220));
+  markerSize.addEventListener("input", () => scheduleRender(220));
+  edgeWidth.addEventListener("input", () => scheduleRender(220));
+  arrowSize.addEventListener("input", () => scheduleRender(220));
+
+  // The Clear buttons under the multi-selects need to also fire a re-render.
+  $("m1-sender-clear").addEventListener("click", () => scheduleRender(80));
+  $("m1-receiver-clear").addEventListener("click", () => scheduleRender(80));
 
   // When slice or MI changes, refresh threshold range + celltype lists + loadings.
   let bindBusy = false;
@@ -340,7 +383,10 @@
   })();
 
   // Re-render server-themed Plotly figures when the user toggles theme.
+  // Includes the spatial canvas — the figure has the theme baked in by the
+  // server, so it must be re-fetched, not just re-skinned client-side.
   window.addEventListener("spn:themechange", () => {
+    render();
     refreshLoadings();
     refreshCircleSummary();
     if (enrichmentLoaded) loadEnrichment();

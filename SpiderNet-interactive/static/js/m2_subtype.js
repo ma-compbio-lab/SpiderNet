@@ -19,6 +19,7 @@
   const umapMinDist = $("m2-umap-min-dist");
   const randomState = $("m2-random-state");
   const aggMode = $("m2-agg-mode");
+  const cellSize = $("m2-cell-size");
   const runBtn = $("m2-run");
   const statusEl = $("m2-status");
   const runtimeEl = $("m2-runtime");
@@ -110,6 +111,7 @@
         louvain_resolution: parseFloat(louvainRes.value),
         umap_min_dist: parseFloat(umapMinDist.value),
         random_state: parseInt(randomState.value, 10),
+        marker_size: parseFloat(cellSize.value) || 4,
         theme: currentTheme(),
       });
       const dt = ((performance.now() - t0) / 1000).toFixed(1);
@@ -233,6 +235,41 @@
       setStatus(`Init failed: ${err.message}`);
     }
   })();
+
+  // Cell-size: cheap UMAP-only re-render via /api/umap-restyle.
+  // Only fires once a run has been executed (otherwise nothing to restyle).
+  let restyleTimer = null;
+  async function restyleUmap() {
+    if (!CURRENT_CACHE_KEY) return;
+    try {
+      const r = await fetch(`${BASE}/api/umap-restyle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cache_key: CURRENT_CACHE_KEY,
+          marker_size: parseFloat(cellSize.value) || 4,
+          theme: currentTheme(),
+        }),
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `umap-restyle ${r.status}`);
+      renderFig(umapDiv, data.umap_figure);
+    } catch (err) {
+      console.warn("UMAP restyle failed:", err);
+    }
+  }
+  // Live label + debounced restyle. Range sliders fire `input` while dragging;
+  // bump the debounce up so we don't flood the server on each pixel.
+  const cellSizeLabel = $("m2-cell-size-val");
+  function updateCellSizeLabel() {
+    if (cellSizeLabel) cellSizeLabel.textContent = parseFloat(cellSize.value).toFixed(1);
+  }
+  updateCellSizeLabel();
+  cellSize.addEventListener("input", () => {
+    updateCellSizeLabel();
+    clearTimeout(restyleTimer);
+    restyleTimer = setTimeout(restyleUmap, 200);
+  });
 
   // Re-render server-themed Plotly figures when the user toggles theme.
   window.addEventListener("spn:themechange", () => {
