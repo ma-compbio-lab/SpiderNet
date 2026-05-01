@@ -238,9 +238,13 @@
 
   // Cell-size: cheap UMAP-only re-render via /api/umap-restyle.
   // Only fires once a run has been executed (otherwise nothing to restyle).
+  // Uses an in-flight counter to discard out-of-order responses on rapid drags.
   let restyleTimer = null;
+  let restyleInflight = 0;
   async function restyleUmap() {
     if (!CURRENT_CACHE_KEY) return;
+    const reqId = ++restyleInflight;
+    const t0 = performance.now();
     try {
       const r = await fetch(`${BASE}/api/umap-restyle`, {
         method: "POST",
@@ -252,8 +256,19 @@
         }),
       });
       const data = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(data.error || `umap-restyle ${r.status}`);
+      if (reqId !== restyleInflight) return;          // stale, skip
+      if (!r.ok) {
+        // 410 means the in-process cache got evicted (e.g. server restart).
+        // Don't silently re-cluster — tell the user what happened.
+        if (r.status === 410) {
+          setStatus("Cached run was evicted. Click Run subtype discovery to recompute.");
+          return;
+        }
+        throw new Error(data.error || `umap-restyle ${r.status}`);
+      }
       renderFig(umapDiv, data.umap_figure);
+      const dt = ((performance.now() - t0) / 1000).toFixed(2);
+      console.debug(`[m2] umap-restyle done in ${dt}s`);
     } catch (err) {
       console.warn("UMAP restyle failed:", err);
     }

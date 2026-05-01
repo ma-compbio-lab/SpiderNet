@@ -397,11 +397,13 @@
   // And on theme toggle (colors flip).
   window.addEventListener("spn:themechange", refreshDegSchematics);
 
+  let insituInflight = 0;
   async function runInsitu() {
     if (!CURRENT_CACHE_KEY || !CURRENT_PAIR_KEY) {
       insituStatus.textContent = "Run cascade analysis first.";
       return;
     }
+    const reqId = ++insituInflight;
     insituRunBtn.disabled = true;
     setInsituSpinner(true);
     insituStatus.textContent = "Rendering...";
@@ -421,6 +423,7 @@
         arrow_size: parseFloat(insituArrowSize.value) || 0.55,
         theme: currentTheme(),
       });
+      if (reqId !== insituInflight) return;        // stale, skip
       const dt = ((performance.now() - t0) / 1000).toFixed(1);
       renderFig(insituDiv, data.figure);
       const m = data.meta;
@@ -429,9 +432,9 @@
         `cells: ${m.n_cell1}/${m.n_cell2}/${m.n_cell3} · ${dt}s`;
       INSITU_RENDERED = true;
     } catch (err) {
-      insituStatus.textContent = `Error: ${err.message}`;
+      if (reqId === insituInflight) insituStatus.textContent = `Error: ${err.message}`;
     } finally {
-      setInsituSpinner(false);
+      if (reqId === insituInflight) setInsituSpinner(false);
       insituRunBtn.disabled = false;
     }
   }
@@ -490,6 +493,19 @@
   degRunBtn.addEventListener("click", runDegGo);
   stemTopn.addEventListener("change", () => {
     if (CURRENT_PAIR_KEY) loadStem(CURRENT_PAIR_KEY);
+  });
+
+  // Sliders → debounced auto-render of the in-situ cascade. Only fires once
+  // an initial Render has been done (so we don't spam the server while the
+  // user is still picking a pair / triple). Race-protected by `insituInflight`.
+  let insituRenderTimer = null;
+  function scheduleInsituRender(delayMs = 240) {
+    if (!INSITU_RENDERED) return;     // wait for first explicit Render
+    clearTimeout(insituRenderTimer);
+    insituRenderTimer = setTimeout(runInsitu, delayMs);
+  }
+  [insituMiThr, insituCellSize, insituCellAlpha, insituEdgeWidth, insituArrowSize].forEach((el) => {
+    el.addEventListener("input", () => scheduleInsituRender(240));
   });
 
   // Re-render server-themed Plotly figures when the user toggles theme.
