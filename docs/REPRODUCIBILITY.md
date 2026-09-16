@@ -2,7 +2,9 @@
 
 ## 1. Use the matching environment
 
-Install the package from the repository root. Python 3.11 is required. Use the existing PyTorch/PyG setup described in `SpiderNet/README.md`; `requirements*.txt` and `Tutorial/R_requirements.md` describe additional dependencies. The recorded full freeze is an environment snapshot, not a portable lockfile for every operating system.
+Install the package from the repository root. Python 3.11 is required. Follow the [root installation guide](../README.md#installation) for PyTorch/PyG and the optional UI and benchmark requirements. `Tutorial/R_requirements.md` describes R dependencies. The recorded full freeze is a historical environment snapshot with conflicting optional dependency versions; do not install from it as a lockfile.
+
+The optional requirements and package extras constrain the NumPy/igraph/PySAL stack to compatible versions. Run `python -m pip check` and the documented import checks after installation. Successful dependency and import checks do not establish numerical agreement of a complete analysis; verify the relevant study outputs separately.
 
 Do not replace method settings, fitted models, random seeds, or normalization to resolve an environment error. Saved pickle, PyG and checkpoint objects require compatible dependencies.
 

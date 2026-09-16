@@ -4,7 +4,7 @@
 
 ## Overview
 
-![SpiderNet overview: learning directional meta-interactions and their biological applications](SpiderNet/SpiderNet-interactive/static/SpiderNet_method_hq.png)
+![SpiderNet overview: learning directional meta-interactions and their biological applications](SpiderNet/SpiderNet-interactive/static/spidernet_overview.png)
 
 SpiderNet is an interpretable deep learning framework for learning directional cell-cell meta-interactions (MIs) from spatial omics data.
 
@@ -57,20 +57,31 @@ The installable source is under `SpiderNet/SpiderNet/`; the root `pyproject.toml
 
 ### 3. Install optional dependencies
 
-Install the dependencies needed for the workflows you intend to run:
+Run these commands from the **repository root**, which contains this README and the outer `pyproject.toml`. Install only the optional dependencies needed for your workflows:
 
 ```bash
 # Notebook and tutorial dependencies
-pip install -r requirements-tutorial.txt
+python -m pip install -r requirements-tutorial.txt
 
 # Interactive application dependencies
-python -m pip install -r .\requirements-UI.txt
+python -m pip install -r SpiderNet/requirements-UI.txt
 
 # Optional external-method benchmark dependencies
-pip install -r requirements-benchmark.txt
+python -m pip install -r requirements-benchmark.txt
 ```
 
-Some R/R Markdown analyses require separate R packages; see [R requirements](Tutorial/R_requirements.md) and the relevant study README. `requirements-full-freeze.txt` records a development environment and is not a portable installation recipe for every operating system.
+If your current directory is the inner `SpiderNet/` directory (containing `requirements-UI.txt`), use `python -m pip install -r requirements-UI.txt` instead. Do not add another `SpiderNet/` prefix from that directory.
+
+To install both UI and external-method benchmark dependencies together from the repository root:
+
+```bash
+python -m pip install -r SpiderNet/requirements-UI.txt -r requirements-benchmark.txt
+python -m pip check
+```
+
+The optional graph stack uses `igraph==0.11.9`, `leidenalg==0.10.2`, and `louvain==0.8.2`. COMMOT additionally uses `numpy==1.26.4`, `python-igraph==0.11.9`, `pysal==25.7`, and `tobler==0.12.1`. These constraints avoid the NumPy 2.x and igraph 1.x conflicts observed when installing unconstrained optional dependencies. The package extras also carry these constraints: `python -m pip install ".[interactive,benchmark]"`.
+
+Some R/R Markdown analyses require separate R packages; see [R requirements](Tutorial/R_requirements.md) and the relevant study README. `requirements-full-freeze.txt` is a historical development snapshot with conflicting optional dependency versions; do not use it as an installation requirements file or a validated lockfile.
 
 For Jupyter, register the environment as a notebook kernel:
 
@@ -89,7 +100,19 @@ python -c "import SpiderNet; print(SpiderNet.__file__)"
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 python -c "import torch_geometric, torch_scatter, torch_sparse; print('PyG OK')"
 python -c "from SpiderNet.utils import get_default_cellchat_db; print(get_default_cellchat_db('human'))"
+python -m pip check
 ```
+
+After installing optional dependencies, also check the imports you need:
+
+```bash
+# UI dependencies
+python -c "import flask, igraph, louvain, leidenalg; print('UI dependencies OK')"
+# External-method benchmarks
+python -c "import commot; print('COMMOT import OK')"
+```
+
+The compatible optional versions above passed dependency and import checks in a Windows Python 3.11 environment. These checks do not replace running the study workflows. Louvain may emit a non-fatal `pkg_resources` deprecation warning with setuptools 81.0.0.
 
 ---
 
@@ -217,7 +240,7 @@ SpiderNet-Interactive is a local Flask application for exploring trained SpiderN
 From the repository root, install the UI dependencies and restore the interactive data profile:
 
 ```bash
-pip install -r SpiderNet/requirements-UI.txt
+python -m pip install -r SpiderNet/requirements-UI.txt
 python scripts/data.py restore --profile interactive --archive-dir /path/to/archives
 cd SpiderNet/SpiderNet-interactive
 python app.py

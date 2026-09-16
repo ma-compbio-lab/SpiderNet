@@ -3,11 +3,12 @@
 # The web app reuses the SpiderNet package's environment, so the simplest
 # install is:
 #
-#     conda activate SpiderNet_env             # the env that trained your runs
-#     pip install -r requirements-UI.txt       # adds Flask + plotly on top
+#     conda activate SpiderNet_env
+#     python -m pip install -r SpiderNet/requirements-UI.txt
 #
-# These pins are *floors*, not ceilings — they reflect what's been tested.
-# Tighten them if you need strict reproducibility.
+# Run the command above from the repository root. From this file's directory,
+# use: python -m pip install -r requirements-UI.txt
+# Graph-library pins match the optional COMMOT stack; this is not a full lockfile.
 
 
 # --- Web framework -----------------------------------------------------------
@@ -34,8 +35,9 @@ umap-learn>=0.5
 
 # scanpy's `sc.tl.louvain` needs python-igraph + the `louvain` package
 # (PyPI name "Louvain", import name "louvain"). Both are required.
-igraph>=0.10
-Louvain>=0.8
+igraph==0.11.9
+Louvain==0.8.2
+leidenalg==0.10.2
 
 
 # --- Pathway / GO enrichment (M1, M2, M3, M4 bubble plots) ------------------
@@ -43,8 +45,8 @@ gseapy>=1.1
 
 
 # --- Misc -------------------------------------------------------------------
-# Some scanpy / anndata stacks pull setuptools at import time; pin below 82
-# to avoid the recent pkg_resources deprecation breakage on older envs.
+# Louvain imports pkg_resources. The tested setuptools 81.0.0 still provides it;
+# retain the compatibility ceiling. Its deprecation warning is non-fatal.
 setuptools<82
 
 
