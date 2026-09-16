@@ -64,7 +64,7 @@ Install the dependencies needed for the workflows you intend to run:
 pip install -r requirements-tutorial.txt
 
 # Interactive application dependencies
-pip install -r SpiderNet/requirements-UI.txt
+python -m pip install -r .\requirements-UI.txt
 
 # Optional external-method benchmark dependencies
 pip install -r requirements-benchmark.txt
