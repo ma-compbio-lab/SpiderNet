@@ -64,7 +64,7 @@ Run these commands from the **repository root**, which contains this README and 
 python -m pip install -r requirements-tutorial.txt
 
 # Interactive application dependencies
-python -m pip install -r SpiderNet/requirements-UI.txt
+python -m pip install -r requirements-UI.txt
 
 # Optional external-method benchmark dependencies
 python -m pip install -r requirements-benchmark.txt
