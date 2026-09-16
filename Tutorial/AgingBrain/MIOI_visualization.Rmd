@@ -1,5 +1,5 @@
 ---
-title: "SpiderNet MI Circos Visualization"
+title: "Aging Brain MI-29 Cell-Type Circle Plots"
 output:
   html_document:
     toc: true
@@ -13,13 +13,15 @@ knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
 
 # Overview
 
-This report generates circos visualizations for SpiderNet meta-interaction outputs in the AgingBrain dataset. The current workflow focuses on three related plots for **MI-29**:
+This report generates cell-type-level circle plots for SpiderNet meta-interaction (MI) outputs in the MERFISH ageing mouse brain dataset. The workflow focuses on three views of **MI-29**, a T-cell-associated pro-ageing communication module:
 
 1. A full cell-type interaction plot with node labels.
 2. A full cell-type interaction plot without labels.
 3. A T-cell-centered interaction plot colored by effect direction and significance.
 
-The report assumes that the input CSV files have already been exported to the SpiderNet result directory.
+The labeled full-network plot supports panel b of the ageing-brain supplementary figure showing MI-29-mediated T-cell communication. The T-cell-centered plot supports panel c of the ageing-brain main figure, where edge color represents the Spearman correlation between received MI-29 strength and age and non-significant associations are gray. The unlabeled full-network plot is an alternate export for figure assembly.
+
+The report consumes cell-type summaries exported by `AgingBrain_training_analysis.ipynb`; it does not recompute MI strengths, correlations, or P values.
 
 # Setup
 
@@ -30,7 +32,10 @@ library(scales)
 ```
 
 ```{r paths}
-result_dir <- "D:/SpiderNet/Results/AgingBrain/V1/SpiderNet_Result_dim30/"
+result_dir <- Sys.getenv(
+  "SPIDERNET_AGINGBRAIN_RESULT_DIR",
+  unset = "D:/SpiderNet/Results/AgingBrain/V1/SpiderNet_Result_dim30/"
+)
 
 all_links_file <- file.path(result_dir, "MI-29_all_links.csv")
 tcell_links_file <- file.path(result_dir, "MI-29_Tcell_links.csv")
@@ -39,6 +44,8 @@ output_all_labeled <- file.path(result_dir, "MI-29_all_CIRCOS_links_nodesColored
 output_all_no_label <- file.path(result_dir, "MI-29_all_CIRCOS_links_nodesColored_arrow_no_label.png")
 output_tcell_signif <- file.path(result_dir, "MI29_Tcell_CIRCOS_links_nodesColored_arrow_significantColored.pdf")
 ```
+
+`MI-29_all_links.csv` must provide `Sender`, `Receiver`, and `Mean`. `MI-29_Tcell_links.csv` must additionally provide `Corr` and `P.value`, computed upstream using the two-sided Spearman test reported in the manuscript.
 
 # Shared definitions
 
@@ -164,7 +171,7 @@ draw_directed_links <- function(df) {
 
 # Full MI-29 network across all cell-type pairs
 
-This section visualizes the full MI-29 interaction network. Link darkness and width both reflect interaction strength, and stronger links are plotted last so they remain visible on top.
+This section visualizes the full MI-29 interaction network summarized across directed cell-type pairs. Link darkness and width both reflect mean MI-29 strength, and stronger links are plotted last so they remain visible on top.
 
 ```{r all-links-data}
 df_all <- read.csv(all_links_file)
@@ -186,7 +193,7 @@ nodes_all <- intersect(celltypes, unique(c(df_all$Sender, df_all$Receiver)))
 
 ## Labeled version
 
-```{r all-links-labeled, eval=FALSE}
+```{r all-links-labeled, eval=TRUE}
 pdf(output_all_labeled, width = 10, height = 10)
 
 initialize_circos_layout(nodes_all)
@@ -202,7 +209,7 @@ dev.off()
 
 This version is useful when the figure is intended for composition in a multi-panel layout and text labels are added elsewhere.
 
-```{r all-links-no-label, eval=FALSE}
+```{r all-links-no-label, eval=TRUE}
 png(output_all_no_label, width = 1800, height = 1800, res = 300)
 
 initialize_circos_layout(nodes_all, with_padding = FALSE)
@@ -216,7 +223,7 @@ dev.off()
 
 # T-cell-centered MI-29 network
 
-This section focuses on T-cell outgoing links. Significant edges are colored by correlation, while non-significant edges are shown in gray.
+This section focuses on MI-29 links sent by T cells. Significant edges are colored by the correlation between received MI-29 strength and age, while non-significant edges are shown in gray.
 
 ```{r tcell-data}
 df_tcell <- read.csv(tcell_links_file)
@@ -241,7 +248,7 @@ df_tcell$link_col <- ifelse(
 nodes_tcell <- intersect(celltypes, unique(c(df_tcell$Sender, df_tcell$Receiver)))
 ```
 
-```{r tcell-plot, eval=FALSE}
+```{r tcell-plot, eval=TRUE}
 cairo_pdf(
   filename = output_tcell_signif,
   width = 10,
@@ -282,6 +289,6 @@ dev.off()
 
 # Notes
 
-- Update `result_dir` if the MI export files are stored in a different SpiderNet result folder.
+- Set `SPIDERNET_AGINGBRAIN_RESULT_DIR` (or update `result_dir`) if the MI export files are stored in a different SpiderNet result folder.
 - To visualize another MI, replace the input CSV file names and adjust the output file names accordingly.
-- The plotting chunks are set to `eval = FALSE` by default so the document can be reviewed without regenerating files automatically. Set them to `TRUE` when you are ready to export the figures.
+- The plotting chunks run automatically through `python run_benchmarks.py --stage r-plots --plot-only`.

@@ -1,5 +1,5 @@
 ---
-title: "MI link visualization"
+title: "Aging Brain MI Link Visualization"
 output:
   html_document:
     toc: true
@@ -17,14 +17,16 @@ knitr::opts_chunk$set(
 
 # Overview
 
-This notebook visualizes inferred MI links between cells using a circular layout. It is organized so that the dataset-specific settings are concentrated at the beginning, making it easier to adapt the workflow to another dataset.
+This report visualizes inferred meta-interaction (MI) links between individual cells in the MERFISH ageing mouse brain dataset. It generates the circular MI overview used in panel a of the SpiderNet ageing-brain main figure.
+
+The two input tables are exported by `AgingBrain_training_analysis.ipynb`. The edge table is already restricted upstream to directed neighboring cell pairs for which at least one MI strength is at least 0.7; `interaction_num` records how many MI dimensions meet that threshold. This report does not repeat that scientific filtering step.
 
 The workflow includes:
 
 1. define dataset paths and plotting options;
-2. load cell metadata and inferred MI edges;
+2. load cell metadata and the upstream-filtered directed MI edges;
 3. optionally subset the data;
-4. compute weighted cell degree from the inferred graph;
+4. compute each cell's incident MI count from the inferred graph;
 5. prepare circular layout coordinates;
 6. draw cell-type sectors, degree bars, and MI links;
 7. export the figure to PDF.
@@ -34,10 +36,17 @@ The workflow includes:
 Edit this section first when applying the notebook to a new dataset.
 
 ```{r user-settings}
-# Main input/output directory
-file_savepath_main <- "D:/SpiderNet/Results/AgingBrain/V1/SpiderNet_Result_dim30/"
+# Main input/output directory. Override the environment variable when results are
+# stored elsewhere; the default preserves the directory used for the paper analysis.
+file_savepath_main <- Sys.getenv(
+  "SPIDERNET_AGINGBRAIN_RESULT_DIR",
+  unset = "D:/SpiderNet/Results/AgingBrain/V1/SpiderNet_Result_dim30/"
+)
 
 # Input files (expected under file_savepath_main by default)
+# cell_meta_all.csv: celltype, age, and cellname for each cell
+# MI_edge_index_all_choose.csv: source, target, and interaction_num for each
+# upstream-selected directed neighboring cell pair
 cell_meta_file <- file.path(file_savepath_main, "cell_meta_all.csv")
 edge_file      <- file.path(file_savepath_main, "MI_edge_index_all_choose.csv")
 
@@ -424,9 +433,9 @@ cat("Cells after filtering:", nrow(cell_meta), "\n")
 cat("Edges after filtering:", nrow(edge_index_all_choose), "\n")
 ```
 
-# 6. Compute weighted degree
+# 6. Compute incident MI count
 
-For each cell, the weighted degree is defined as the sum of `interaction_num` across all incident edges.
+For each cell, the displayed degree is the sum of `interaction_num` across all incident edges. Thus, it summarizes the number of above-threshold MI dimensions on those edges rather than the sum of the underlying continuous MI strengths.
 
 ```{r compute-degree}
 cell_meta <- compute_degree_table(
@@ -463,7 +472,7 @@ print(cell_counts)
 attr(cell_meta, "scaled_counts") <- scaled_counts
 ```
 
-# 8. Draw and save the circos plot
+# 8. Draw and save the circular plot
 
 ```{r make-plot}
 draw_mi_circos(
@@ -489,9 +498,9 @@ cat("Elapsed time:", round(difftime(end_time, start_time, units = "secs"), 2), "
 
 # Notes for adapting this notebook
 
-When applying this notebook to a new dataset, the sections that usually need to change are:
+When applying this report to a new dataset, the sections that usually need to change are:
 
-- `file_savepath_main`, input file names, and output file name;
+- `SPIDERNET_AGINGBRAIN_RESULT_DIR` (or `file_savepath_main`), input file names, and output file name;
 - the target celltype used for focused plotting;
 - the `celltypes` order;
 - the color palette;

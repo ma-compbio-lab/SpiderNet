@@ -1,0 +1,21 @@
+__pycache__/
+.ipynb_checkpoints/
+output/executed/
+output/**/*.pkl
+output/**/*.npy
+output/**/*.npz
+output/**/*.rds
+output/**/*.Rdata
+output/**/*.RData
+output/**/*.log
+!output/
+!output/**/
+!output/**/*.pdf
+!output/**/*.png
+!output/**/*.svg
+!output/**/*.csv
+!output/**/*.tsv
+!output/**/*.json
+
+# Versioned data bundles are restored here locally.
+/output/

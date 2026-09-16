@@ -1,0 +1,29 @@
+<!-- Breadcrumb Navigation -->
+<nav aria-label="breadcrumb" class="mb-4">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item">
+            <a href="{{ url_for('index') }}">
+                <i class="fas fa-home me-1"></i>Home
+            </a>
+        </li>
+        {% if dataset_name %}
+        <li class="breadcrumb-item">
+            <a href="{{ url_for('index') }}#datasets">Datasets</a>
+        </li>
+        <li class="breadcrumb-item">
+            <span class="text-muted">{{ dataset_name }}</span>
+        </li>
+        {% if analysis_type %}
+        <li class="breadcrumb-item active" aria-current="page">
+            {% if analysis_type == 'basic' %}
+                <i class="fas fa-chart-line me-1"></i>Basic Analysis
+            {% elif analysis_type == 'subtype' %}
+                <i class="fas fa-microscope me-1"></i>Subtype Analysis
+            {% elif analysis_type == 'cascade' %}
+                <i class="fas fa-sitemap me-1"></i>MI Cascade
+            {% endif %}
+        </li>
+        {% endif %}
+        {% endif %}
+    </ol>
+</nav>

@@ -65,6 +65,7 @@ benchmark = [
 [tool.setuptools]
 packages = ["SpiderNet"]
 include-package-data = true
+package-dir = {"" = "SpiderNet"}
 
 [tool.setuptools.package-data]
 SpiderNet = ["resources/*.csv"]

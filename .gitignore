@@ -1,9 +1,3 @@
-# Local-only files
-CLAUDE.md
-PLAN.md
-Interactivetool
-skill*
-
 # Python bytecode / cache
 __pycache__/
 *.py[cod]
@@ -80,4 +74,24 @@ Data/
 # Analysis logs and generated report folders
 omnipathr-log/
 GO_MIOI_target/
-SpiderNet_GitHub/
+
+# Editor swap files
+*.swp
+*.swo
+
+# Local assistant state
+.claude/
+
+# Restored research data and local downloads
+.spidernet/
+/Results/
+/Data/
+/benchmarks/training_speed/runs/
+/benchmarks/training_speed/results/
+/benchmarks/training_speed/initialization_cache_data/
+*.zip
+
+# The lowercase data directory contains the public catalog, not raw data.
+!/data/
+!/data/*.json
+!/data/*.md

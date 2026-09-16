@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}{{ module_title }} — {{ dataset_name }} — {{ app_title }}{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  .m2-controls label { font-weight: 500; margin-bottom: 0.15rem; }
+  #m2-umap, #m2-cluster-size, #m2-sender-heatmap, #m2-receiver-heatmap {
+    background: var(--plot-bg); border-radius: var(--radius-sm);
+    border: 1px solid var(--border); min-height: 320px;
+  }
+  .m2-spinner-overlay {
+    position: absolute; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    background: color-mix(in oklab, var(--bg) 65%, transparent);
+    color: var(--fg); border-radius: var(--radius-sm);
+    backdrop-filter: blur(2px);
+  }
+  .m2-spinner-overlay.active { display: flex; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Datasets</a></li>
+      <li class="breadcrumb-item">{{ dataset_name }}</li>
+      <li class="breadcrumb-item active" aria-current="page">{{ module_title }}</li>
+    </ol>
+  </nav>
+
+  <header class="module-header">
+    <h1>{{ module_title }}</h1>
+    <span class="module-meta">{{ dataset_name }}</span>
+  </header>
+
+  <div class="row g-3">
+    <!-- Left: controls -->
+    <div class="col-lg-3 m2-controls">
+      <div class="card">
+        <div class="card-body">
+          <p class="small text-muted mb-3">
+            For the chosen cell type, cluster cells in the space of aggregated
+            MI profiles (PCA → kNN → Louvain → UMAP).
+          </p>
+
+          <div class="mb-3">
+            <label for="m2-cell-type">Cell type</label>
+            <select id="m2-cell-type" class="form-select form-select-sm"></select>
+          </div>
+
+          <div class="mb-3">
+            <label for="m2-mi-threshold" class="d-flex justify-content-between">
+              <span>MI threshold</span>
+              <span class="text-muted small" id="m2-mi-threshold-value">0.60</span>
+            </label>
+            <input type="range" class="form-range" id="m2-mi-threshold" min="0" max="1" step="0.01" value="0.6">
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-6">
+              <label for="m2-n-neighbors" class="small">k neighbors</label>
+              <input type="number" id="m2-n-neighbors" class="form-control form-control-sm" value="25" min="5" step="1">
+            </div>
+            <div class="col-6">
+              <label for="m2-n-pcs" class="small">n PCs</label>
+              <input type="number" id="m2-n-pcs" class="form-control form-control-sm" value="50" min="2" step="1">
+            </div>
+            <div class="col-6">
+              <label for="m2-louvain-res" class="small">Louvain res</label>
+              <input type="number" id="m2-louvain-res" class="form-control form-control-sm" value="0.17" min="0.05" max="2" step="0.01">
+            </div>
+            <div class="col-6">
+              <label for="m2-umap-min-dist" class="small">UMAP min_dist</label>
+              <input type="number" id="m2-umap-min-dist" class="form-control form-control-sm" value="0.10" min="0" max="1" step="0.05">
+            </div>
+            <div class="col-6">
+              <label for="m2-random-state" class="small">Random seed</label>
+              <input type="number" id="m2-random-state" class="form-control form-control-sm" value="0" step="1">
+            </div>
+            <div class="col-6">
+              <label for="m2-agg-mode" class="small">Aggregation</label>
+              <select id="m2-agg-mode" class="form-select form-select-sm">
+                <option value="max" selected>max</option>
+                <option value="mean">mean</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label for="m2-cell-size" class="small d-flex justify-content-between">
+                <span>Cell size</span><span class="font-monospace text-muted" id="m2-cell-size-val">4.0</span>
+              </label>
+              <input type="range" id="m2-cell-size" class="form-range" value="4" min="1" max="20" step="0.5">
+            </div>
+          </div>
+
+          <button id="m2-run" class="btn btn-primary btn-sm w-100">
+            <i class="fas fa-play me-1"></i>Run subtype discovery
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: results -->
+    <div class="col-lg-9 position-relative">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2 small text-muted">
+            <span id="m2-status">Loading metadata...</span>
+            <span id="m2-runtime"></span>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-lg-7 position-relative">
+              <div class="text-muted small mb-1">UMAP · colored by Louvain cluster</div>
+              <div id="m2-umap"></div>
+            </div>
+            <div class="col-lg-5">
+              <div class="text-muted small mb-1">Cluster sizes</div>
+              <div id="m2-cluster-size"></div>
+              <div id="m2-summary-table" class="mt-2 small"></div>
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-lg-6">
+              <div id="m2-sender-heatmap"></div>
+            </div>
+            <div class="col-lg-6">
+              <div id="m2-receiver-heatmap"></div>
+            </div>
+          </div>
+
+          <div id="m2-spinner" class="m2-spinner-overlay">
+            <div class="text-center">
+              <div class="spinner-border" role="status"></div>
+              <div class="small mt-2">Running PCA · kNN · Louvain · UMAP...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEG + Enrichment panel -->
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card position-relative">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-end gap-2 mb-2">
+            <h2 class="h5 mb-0 me-3">
+              <i class="fas fa-dna text-primary me-2"></i>
+              Differential expression &amp; enrichment
+            </h2>
+            <div>
+              <label for="m2-deg-cluster" class="small text-muted mb-0">Cluster</label>
+              <select id="m2-deg-cluster" class="form-select form-select-sm" style="min-width: 7rem"></select>
+            </div>
+            <div>
+              <label for="m2-deg-direction" class="small text-muted mb-0">Direction</label>
+              <select id="m2-deg-direction" class="form-select form-select-sm" style="min-width: 6rem">
+                <option value="up" selected>up</option>
+                <option value="down">down</option>
+              </select>
+            </div>
+            <div>
+              <label for="m2-deg-lfc" class="small text-muted mb-0">log2FC ≥</label>
+              <input type="number" id="m2-deg-lfc" class="form-control form-control-sm" value="0.5" min="0" step="0.1" style="width: 6rem">
+            </div>
+            <div>
+              <label for="m2-deg-padj" class="small text-muted mb-0">padj ≤</label>
+              <input type="number" id="m2-deg-padj" class="form-control form-control-sm" value="0.05" min="0" max="1" step="0.01" style="width: 6rem">
+            </div>
+            <div class="ms-auto">
+              <button id="m2-deg-run" class="btn btn-primary btn-sm" disabled>
+                <i class="fas fa-play me-1"></i>Compute DEG + GO/KEGG
+              </button>
+            </div>
+          </div>
+          <p class="small text-muted">
+            First call builds an expression cache for the cell type
+            (size-dependent — minutes on Malignant). Subsequent threshold or
+            cluster changes are fast.
+          </p>
+          <div id="m2-deg-status" class="small text-muted mb-2"></div>
+
+          <div class="row g-3">
+            <div class="col-lg-7">
+              <div id="m2-volcano" style="min-height: 420px;"></div>
+            </div>
+            <div class="col-lg-5">
+              <div id="m2-marker-table" style="max-height: 420px; overflow:auto;" class="small"></div>
+            </div>
+            <div class="col-lg-6">
+              <div id="m2-go-bubble" style="min-height: 360px;"></div>
+            </div>
+            <div class="col-lg-6">
+              <div id="m2-kegg-bubble" style="min-height: 360px;"></div>
+            </div>
+          </div>
+
+          <div id="m2-deg-spinner" class="m2-spinner-overlay">
+            <div class="text-center">
+              <div class="spinner-border" role="status"></div>
+              <div class="small mt-2">Running Wilcoxon DEG · Enrichr GO/KEGG...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.M2_BASE_URL = {{ url_for("module2_subtype.api_meta", dataset_name=dataset_name) | tojson }}.replace(/\/api\/meta$/, "");
+</script>
+<script src="{{ url_for('static', filename='js/m2_subtype.js') }}"></script>
+{% endblock %}

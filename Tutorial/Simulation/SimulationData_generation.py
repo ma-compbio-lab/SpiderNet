@@ -60,7 +60,7 @@ warnings.filterwarnings("ignore")
 
 @dataclass
 class SimulationConfig:
-    data_root: str = r"D:/SpiderNet/Data/Simulation"
+    data_root: str = os.environ.get("SIMULATION_DATA_ROOT", "D:/SpiderNet/Data/Simulation")
     num_experiments: int = 30
 
     # Tissue layout
@@ -873,6 +873,8 @@ def run_single_experiment(
 
     # 6. Optional diagnostic figures
     if cfg.save_diagnostic_figures:
+        out_dir = Path(os.environ.get("SIMULATION_OUTPUT_ROOT", str(Path(__file__).resolve().parent / "output"))) / "Simulation_Data" / setting_name / f"Experiment_{experiment_index}"
+        out_dir.mkdir(parents=True, exist_ok=True)
         plot_celltype_map(out_dir, spatial_location, celltype_cell, cfg)
         plot_inner_area_map(out_dir, spatial_location, inner_cell)
         plot_edge_map(out_dir, spatial_location, celltype_cell, edge_index_df, mode="all")

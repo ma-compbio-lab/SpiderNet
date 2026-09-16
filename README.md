@@ -1,42 +1,45 @@
-## Overview
-<img width="1920" height="1180" alt="SpiderNet_githubfigure" src="https://github.com/user-attachments/assets/6dbc2123-a2fc-4a05-b7f2-c3fe68710b5e" />
-
 # SpiderNet
+
+**A meta-interaction basis for cell-cell communication in tissues**
+
+## Overview
+
+![SpiderNet overview: learning directional meta-interactions and their biological applications](SpiderNet/SpiderNet-interactive/static/spidernet_method_hq.png)
 
 SpiderNet is an interpretable deep learning framework for learning directional cell-cell meta-interactions (MIs) from spatial omics data.
 
-SpiderNet takes gene expression profiles and a spatial cell-cell graph as input. For each directed neighboring cell pair, the encoder maps sender and receiver expression into a non-negative vector of MI strengths. The decoder then uses these MIs to reconstruct ligand-receptor co-expression on cell-cell pairs and gene expression in cells. The non-negative model components make the learned MIs interpretable through intrinsic, ligand-receptor, sender-regulator, and receiver-target gene loadings.
+SpiderNet takes gene expression profiles and a spatial cell-cell graph as input. For each directed neighboring cell pair, the encoder maps sender and receiver expression into a non-negative vector of MI strengths. The decoder uses these MIs to reconstruct ligand-receptor co-expression on cell-cell pairs and gene expression in cells. The non-negative model components make the learned MIs interpretable through intrinsic, ligand-receptor, sender-regulator, and receiver-target gene loadings.
 
-The inferred MIs provide a compact and interpretable representation of multicellular communication programs, enabling downstream analyses such as MI-associated pathway inference, cell-type-pair enrichment, cell subtype discovery, MI cascade detection, in silico spatial perturbation, and phenotype prediction.
+The inferred MIs provide a compact representation of multicellular communication programs, supporting MI-associated pathway inference, cell-type-pair enrichment, cell subtype discovery, MI cascade detection, in silico spatial perturbation, and phenotype prediction.
+
+This repository provides the Python package, eight study workflows, and the SpiderNet-Interactive application. Prepared data and saved results are distributed separately through Zenodo.
 
 ---
 
 ## Installation
 
-SpiderNet requires Python 3.11. We recommend creating a clean conda environment.
+SpiderNet requires Python 3.11. We recommend creating a clean conda environment:
 
 ```bash
 conda create -n SpiderNet_env python=3.11.8
 conda activate SpiderNet_env
 ```
 
-### 1. Install PyTorch and PyTorch Geometric dependencies
+### 1. Install PyTorch and PyTorch Geometric
 
-PyTorch and PyTorch Geometric should be installed before installing SpiderNet, because their installation depends on the operating system, CUDA version, and PyTorch version.
-
-For CUDA 11.7, install PyTorch and PyG-related packages with:
+Install PyTorch and PyG before SpiderNet. Their installation depends on the operating system and CPU/CUDA environment. The recorded CUDA 11.7 setup uses:
 
 ```bash
 pip install torch==2.0.0 torchvision==0.15.1 --index-url https://download.pytorch.org/whl/cu117
-pip install torch-geometric
+pip install torch-geometric==2.7.0
 pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-2.0.0+cu117.html
 ```
 
-If you use a different CUDA version or a CPU-only environment, please install the corresponding PyTorch and PyG wheels.
+For a different CUDA version or a CPU-only environment, install the matching [PyTorch](https://pytorch.org/get-started/previous-versions/) and [PyG](https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html) builds. Saved data and checkpoints also need compatible library versions; see the [reproduction instructions](docs/REPRODUCIBILITY.md).
 
 ### 2. Install SpiderNet
 
-Clone the repository and install SpiderNet from the project root:
+Clone the repository and install from its root:
 
 ```bash
 git clone https://github.com/ma-compbio-lab/SpiderNet.git
@@ -44,45 +47,32 @@ cd SpiderNet
 pip install .
 ```
 
-For development, use editable installation:
+For development or running the repository workflows, use editable installation:
 
 ```bash
 pip install -e .
 ```
 
-Editable installation is recommended when modifying the source code, because changes in the `SpiderNet/` package are reflected without reinstalling.
+The installable source is under `SpiderNet/SpiderNet/`; the root `pyproject.toml` locates it automatically. The Python package can be installed without downloading study data.
 
-### 3. Optional: install tutorial, benchmark, and UI dependencies
+### 3. Install optional dependencies
 
-To run tutorial notebooks, install additional lightweight notebook dependencies:
+Install the dependencies needed for the workflows you intend to run:
 
 ```bash
+# Notebook and tutorial dependencies
 pip install -r requirements-tutorial.txt
-```
 
-Alternatively, install the tutorial optional dependency group defined in `pyproject.toml`:
+# Interactive application dependencies
+pip install -r SpiderNet/requirements-UI.txt
 
-```bash
-pip install -e ".[tutorial]"
-```
-
-To run **SpiderNet-Interactive**, install the UI/web-app dependencies:
-
-```bash
-pip install -r requirements-UI.txt
-```
-
-Some simulation benchmark tutorials require additional external-method dependencies. Install them only when needed:
-
-```bash
+# Optional external-method benchmark dependencies
 pip install -r requirements-benchmark.txt
 ```
 
-The repository also keeps `requirements-full-freeze.txt` as a complete snapshot of the development environment. This file is mainly for reproducibility and is not recommended for routine installation.
+Some R/R Markdown analyses require separate R packages; see [R requirements](Tutorial/R_requirements.md) and the relevant study README. `requirements-full-freeze.txt` records a development environment and is not a portable installation recipe for every operating system.
 
-Some R/R Markdown tutorials require additional R packages. See `Tutorial/R_requirements.md` for installation instructions.
-
-If you are using Jupyter, register the conda environment as a notebook kernel:
+For Jupyter, register the environment as a notebook kernel:
 
 ```bash
 python -m ipykernel install --user --name SpiderNet_env --display-name "Python (SpiderNet_env)"
@@ -92,22 +82,12 @@ python -m ipykernel install --user --name SpiderNet_env --display-name "Python (
 
 ## Verify installation
 
-After installation, test whether SpiderNet can be imported:
+Check the package, deep-learning dependencies, and packaged ligand-receptor resources:
 
 ```bash
 python -c "import SpiderNet; print(SpiderNet.__file__)"
-```
-
-Test whether PyTorch and PyG are available:
-
-```bash
 python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 python -c "import torch_geometric, torch_scatter, torch_sparse; print('PyG OK')"
-```
-
-Test whether the packaged ligand-receptor resources are available:
-
-```bash
 python -c "from SpiderNet.utils import get_default_cellchat_db; print(get_default_cellchat_db('human'))"
 ```
 
@@ -115,15 +95,9 @@ python -c "from SpiderNet.utils import get_default_cellchat_db; print(get_defaul
 
 ## Basic usage
 
-A typical SpiderNet workflow includes:
+A typical SpiderNet workflow consists of preparing spatial omics data and a spatial cell-cell graph, training the model, inferring MI strengths for directed neighboring cell pairs, and performing downstream analyses.
 
-1. Preparing spatial omics data and constructing a spatial cell-cell graph.
-2. Loading processed data into SpiderNet-compatible objects.
-3. Training the SpiderNet model.
-4. Inferring MI strengths for directed neighboring cell pairs.
-5. Running downstream analyses and visualizations.
-
-Example:
+The example below illustrates the training API using an existing processed-data bundle. Set the paths and training configuration for your dataset. For reproducing saved-result figures, go directly to [Reproduce the study results](#reproduce-the-study-results).
 
 ```python
 from pathlib import Path
@@ -138,15 +112,10 @@ from SpiderNet.api import (
     export_results,
 )
 
-# Define input and output paths.
 processed_data_dir = Path("path/to/ProcessedData")
 output_dir = Path("path/to/SpiderNet_Result_dim15")
-model_dir = output_dir / "Model"
 
-# Load processed data.
 processed = load_processed_data(processed_data_dir)
-
-# Configure training.
 training_config = TrainingConfig(
     dim_envir=15,
     max_epoch=50000,
@@ -154,19 +123,16 @@ training_config = TrainingConfig(
     optimizer="adam",
 )
 
-# Build and train model.
 model = build_model(processed, training_config)
 trained_model = run_training(
     model=model,
     processed=processed,
     train_cfg=training_config,
-    model_dir=model_dir,
+    model_dir=output_dir / "Model",
 )
 
-# Infer, normalize, and export MI results.
 outputs = infer_meta_interactions(trained_model, processed)
 outputs = normalize_outputs(outputs)
-
 export_results(
     results=outputs,
     processed=processed,
@@ -175,54 +141,107 @@ export_results(
 )
 ```
 
-Please see the tutorial notebooks for dataset-specific examples.
+The `precessed_data_dir` keyword follows the current public API spelling. Dataset-specific preprocessing, MI dimension selection, and analysis settings are described in the study notebooks and READMEs.
 
 ---
 
-## Tutorial notes
+## Tutorials and studies
 
-The tutorial notebooks demonstrate SpiderNet analyses across multiple datasets, including HGSOC, AgingBrain, PerturbFISH, Pancancer, Simulation, and CCC coupling benchmark examples.
+All study workflows are in `Tutorial/`. Each study provides a README and a `run_benchmarks.py` command-line entry point alongside its analysis notebooks or helper scripts.
 
-Some tutorial notebooks currently use local example paths such as:
+| Study | Analyses | Data profile |
+|---|---|---|
+| [AgingBrain](Tutorial/AgingBrain/README.md) | Age-associated cell interactions, spatial MI patterns, and transfer to sagittal/hippocampal samples | `plot-agingbrain` |
+| [HGSOC](Tutorial/HGSOC/README.md) | Malignant subtypes, CAF signaling, MI cascades, and cell-cell communication comparisons | `plot-hgsoc` |
+| [PerturbFISH](Tutorial/PerturbFISH/README.md) | Perturbation responses, held-out predictions, and spatial perturbation analyses | `plot-perturbfish` |
+| [Pancancer](Tutorial/Pancancer/README.md) | Cross-cancer MI patterns, cascades, bulk projection, survival, and immunotherapy associations | `plot-pancancer` |
+| [Simulation](Tutorial/Simulation/README.md) | Synthetic-data benchmarks and a representative spatial-interaction example | `plot-simulation` |
+| [Coupling benchmark](Tutorial/Coupling_benchmark/README.md) | Directionality, cell-similarity concordance, and spatial specificity | `plot-coupling-benchmark` |
+| [Ablation study](Tutorial/Ablation_study/README.md) | Contributions of model components to coupling and perturbation prediction | `plot-ablation-study` |
+| [Robustness and stability](Tutorial/Robustness_stability/README.md) | MI alignment, annotation errors, resampling, and stability analyses | `plot-robustness-stability` |
 
-```text
-D:/SpiderNet/Data/...
-D:/SpiderNet/Results/...
+See the [study guide](docs/STUDIES.md) for how these workflows connect to model outputs and the [training benchmark](benchmarks/training_speed/BENCHMARK_RESULTS.md) for optional implementation-performance comparisons.
+
+## Data availability
+
+The data supporting the documented SpiderNet reproduction workflows have been uploaded to Zenodo and are currently shared privately for peer review. Editors and reviewers can access the files through the private link supplied in the review manuscript and journal submission materials. The dataset will be made publicly available upon publication of the paper; the dataset DOI and public download links will then be added here and to `data/manifest.json`.
+
+The data collection contains saved results, plotting inputs, interactive datasets, detailed result tables, and training-benchmark outputs. The [data guide](docs/DATA.md) lists the bundles, sizes, and workflow profiles. The manifest records archive and file-level SHA-256 checksums and restoration paths.
+
+## Reproduce the study results
+
+During peer review, download the ZIP archives using the supplied reviewer link and keep their filenames unchanged. From the repository root, list the required bundles and restore one study:
+
+```bash
+python scripts/data.py list
+
+# Replace /path/to/archives with the folder containing the downloaded ZIPs.
+python scripts/data.py restore --profile plot-agingbrain --archive-dir /path/to/archives
+python scripts/data.py verify --profile plot-agingbrain
+
+# Check the required inputs before rendering the saved-result figures.
+python scripts/run_study.py AgingBrain --check --plot-only
+python scripts/run_study.py AgingBrain --plot-only
 ```
 
-Before running these tutorials, please update the data and output paths to match your local directory structure. Some tutorials also require prepared spatial omics datasets, processed SpiderNet input bundles, trained model outputs, or external benchmark results. Please check the corresponding tutorial folder for required input files and expected directory structure.
+To restore all eight default plot-only workflows, use `--profile all-plots` with `restore` and `verify`. Use the restore tool rather than manually extracting ZIPs: identical archived content may need to be placed at multiple workflow paths. Existing identical files are preserved; different existing data are not overwritten by default.
 
-The core SpiderNet package can be installed independently of these tutorial datasets. Dataset-specific notebooks may require additional optional dependencies beyond the core package.
+The original study commands remain available after activating the reproduction paths. In PowerShell, from the repository root:
 
----
-
-## Main modules
-
-SpiderNet contains the following core modules:
-
-- `SpiderNet.config`: configuration dataclasses for paths, preprocessing, and model training.
-- `SpiderNet.io`: loading and saving processed SpiderNet data objects.
-- `SpiderNet.api`: high-level model training, inference, normalization, and export functions.
-- `SpiderNet.model`: core SpiderNet model architecture.
-- `SpiderNet.analysis`: downstream MI enrichment, cascade, perturbation, and phenotype-related analyses.
-- `SpiderNet.visualization`: visualization utilities for MI results.
-- `SpiderNet.MI_dimension_selection`: utilities for selecting the number of MI dimensions.
-- `SpiderNet.utils`: helper functions and default ligand-receptor database paths.
-- `SpiderNet.dataloading_unified`: unified data loading and preprocessing utilities.
-
----
-
-## Package resources
-
-SpiderNet includes default ligand-receptor resources under:
-
-```text
-SpiderNet/resources/
+```powershell
+. ./scripts/activate_reproduction.ps1
+cd Tutorial/AgingBrain
+python run_benchmarks.py --check --plot-only
+python run_benchmarks.py --plot-only
 ```
 
-These include CellChatDB- and scSeqComm-derived ligand-receptor pairs for human and mouse datasets.
+In Bash, use `source scripts/activate_reproduction.sh` before entering the study folder. These helpers point the workflows to data restored inside this checkout. See [reproduction instructions](docs/REPRODUCIBILITY.md) for details.
 
-The default resource paths can be accessed with:
+Automated `python scripts/data.py fetch --profile plot-agingbrain` downloads will become available when public Zenodo URLs are configured.
+
+**Reproduction scope.** These profiles support the documented default saved-result plotting workflows. Some steps redraw figures from saved numerical inputs; others retain archived figures. The Simulation profile includes a representative saved experiment. The archives are not a complete raw-data training collection for every analysis or external comparator. Full analysis and retraining require the inputs and settings described in each study README. Direct notebook execution may require its own path overrides. `--check` validates declared inputs and relevant cache signatures; it does not perform a complete numerical reproduction or render all figures.
+
+---
+
+## SpiderNet-Interactive
+
+SpiderNet-Interactive is a local Flask application for exploring trained SpiderNet runs in a browser. Four modules connect saved model outputs to interactive analyses:
+
+| Module | Purpose |
+|---|---|
+| **M1: Basic analysis** | Spatial MI activity, ligand-receptor and sender/receiver loadings, pathways, and cell-type-pair enrichment |
+| **M2: Subtype discovery** | MI-guided cell clustering, differential expression, and GO/KEGG enrichment |
+| **M3: MI cascades** | Permutation-tested MI cascades, cell-type triplets, spatial displays, and associated gene programs |
+| **M4: Spatial perturbation** | In silico gene knockdown or cell-type replacement using the trained model |
+
+From the repository root, install the UI dependencies and restore the interactive data profile:
+
+```bash
+pip install -r SpiderNet/requirements-UI.txt
+python scripts/data.py restore --profile interactive --archive-dir /path/to/archives
+cd SpiderNet/SpiderNet-interactive
+python app.py
+```
+
+Open **http://localhost:8000**. The application discovers prepared `_UI` datasets under `SpiderNet/Interactivetool/SpiderNet-interactive_V2/`; restart after adding a dataset. Analyses use saved data and caches, while some requests compute additional results or run inference. See the [application guide](SpiderNet/SpiderNet-interactive/README.md) for dataset requirements, caching, and configuration.
+
+---
+
+## Main modules and package resources
+
+| Module | Purpose |
+|---|---|
+| `SpiderNet.config` | Configuration for paths, preprocessing, and training |
+| `SpiderNet.io` | Loading and saving processed data |
+| `SpiderNet.api` | Model construction, training, inference, normalization, and export |
+| `SpiderNet.model` | Model architecture |
+| `SpiderNet.analysis` | MI enrichment, cascades, perturbation, and phenotype-related analyses |
+| `SpiderNet.visualization` | Visualization utilities |
+| `SpiderNet.MI_dimension_selection` | MI dimension selection |
+| `SpiderNet.dataloading_unified` | Data loading and preprocessing |
+| `SpiderNet.utils` | Utilities and default ligand-receptor resource paths |
+
+Four human/mouse ligand-receptor tables derived from CellChatDB and scSeqComm are included under `SpiderNet/SpiderNet/resources/` and installed with the package. Access them with:
 
 ```python
 from SpiderNet.utils import get_default_cellchat_db, get_default_scseqcomm_db
@@ -231,93 +250,26 @@ cellchat_human = get_default_cellchat_db("human")
 scseqcomm_human = get_default_scseqcomm_db("human")
 ```
 
----
+## Repository structure
 
-## Notes for users
+```text
+SpiderNet/
+  SpiderNet/                Python package and ligand-receptor resources
+  SpiderNet-interactive/    Flask application and static assets
+Tutorial/                  Eight study workflows and documentation
+benchmarks/training_speed/ Optional training-performance benchmarks
+data/                      Archive manifest and data instructions
+scripts/                   Data restoration and study launch utilities
+docs/                      Study, data, and reproduction guides
+pyproject.toml             Package installation configuration
+```
 
-The tutorial notebooks and SpiderNet-Interactive web app may require additional dependencies beyond the core SpiderNet package. Lightweight notebook dependencies are provided in `requirements-tutorial.txt`. UI/web-app dependencies for SpiderNet-Interactive are provided in `requirements-UI.txt`. Heavier benchmark or external-method dependencies are provided in `requirements-benchmark.txt` and should be installed only when needed.
-
-R/R Markdown tutorials require separate R packages; see `Tutorial/R_requirements.md`.
-
-The PyTorch / PyG installation commands above are examples for CUDA 11.7. Please adapt them to your own CUDA and PyTorch environment.
-
----
+Large datasets, trained-run bundles, and complete result collections are distributed separately from Git. Restored data are ignored by Git.
 
 ## Citation
 
-If you use SpiderNet in your research, please cite the corresponding SpiderNet manuscript.
-
----
+If you use SpiderNet, please cite the corresponding manuscript, *SpiderNet: A meta-interaction basis for cell-cell communication in tissues*. The manuscript citation and public dataset DOI will be added when available.
 
 ## License
 
-This project is distributed under the MIT License.
-
----
-
-## SpiderNet-Interactive: web app for exploring SpiderNet runs
-
-SpiderNet ships with **SpiderNet-Interactive**, a local Flask web app for interactively exploring trained SpiderNet runs in the browser. Four interconnected modules drive directly off the trained model and processed data — no static plots, every figure is rendered live from the cached run.
-
-### Installation
-
-The web app reuses the SpiderNet environment. PyTorch + PyTorch Geometric (and the SpiderNet package itself) must already be installed via the steps above; then add the web-app extras on top from the repository root:
-
-```bash
-conda activate SpiderNet_env             # the env you used for SpiderNet
-pip install -r requirements-UI.txt
-```
-
-### Quick start
-
-```bash
-cd SpiderNet-interactive
-bash run.sh
-```
-
-Then open **http://localhost:8000**.
-
-On Windows, if `bash run.sh` cannot access the active conda environment, run the app directly from Anaconda Prompt or PowerShell:
-
-```bash
-cd SpiderNet-interactive
-python app.py
-```
-
-### Modules
-
-| | | |
-|---|---|---|
-| **M1** | Basic analysis | *In situ* MI rendering, top LR / sender / receiver loadings per MI, pathway and cell-type-pair enrichment. |
-| **M2** | Subtype discovery | MI-guided clustering of one cell type — PCA → kNN → Louvain → UMAP — with DEGs and GO/KEGG per subcluster. |
-| **M3** | MI cascade | Permutation-tested MI×MI cascade pairs, cell-type triplet stems, *in situ* cascade rendering, and DEG/GO at each cascade position. |
-| **M4** | Spatial perturbation | *In silico* gene knockdown or cell-type replacement against the trained SpiderNet model, paired DEG vs. baseline, GO/KEGG enrichment. |
-
-### Interface
-
-Editorial-scientific design — quiet, typographic, intentional. Source Serif 4 / Geist / Geist Mono pairing, OKLCH color tokens, full **light and dark mode** with an in-app toggle that is persisted to `localStorage` and auto-follows the operating-system preference. All server-rendered Plotly figures re-fetch with the new theme on toggle, so plots stay readable in both modes. The interface also respects `prefers-reduced-motion`.
-
-### Datasets
-
-The app auto-discovers datasets under `Interactivetool/SpiderNet-interactive_V2/`. Each dataset must be a directory ending in `_UI/` containing:
-
-```text
-<Name>_UI/
-├── <Name>_modeltraining_setup.json
-├── config.json
-├── run_dirs.json
-├── ProcessedData/                      # adata_list.pkl, SpiderNet_data_pyg_list.pkl, ...
-└── <VERSION>/
-    └── SpiderNet_Result_dim*/
-        ├── Factor_envir_list.pkl
-        ├── loading_LR_use.npy
-        ├── loading_sender_use.npy
-        ├── loading_receiver_use.npy
-        └── Model/
-            ├── SpiderNet_model_config.json
-            └── model_epoch*.pth
-```
-
-Restart the app after adding a dataset, because discovery runs once at startup. Each dataset appears as a row on the home page with chips linking to M1–M4.
-
-For module internals, the design system, caching layout, and customization, see [SpiderNet-interactive/README.md](SpiderNet-interactive/README.md).
+The source code is distributed under the [MIT License](LICENSE). Data and third-party resources are subject to their respective licenses and attribution requirements.

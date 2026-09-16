@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+
+{% block title %}{{ module_title }} — {{ dataset_name }} — {{ app_title }}{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  .m3-controls label { font-weight: 500; margin-bottom: 0.15rem; }
+  #m3-heatmap, #m3-stem {
+    background: var(--plot-bg); border-radius: var(--radius-sm);
+    border: 1px solid var(--border); min-height: 540px;
+  }
+  .m3-pair-table tbody tr { cursor: pointer; }
+  .m3-pair-table tbody tr.selected { background: var(--accent-tint); }
+  #m3-pair-table-wrap { max-height: 380px; overflow-y: auto; }
+  .m3-spinner-overlay {
+    position: absolute; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    background: color-mix(in oklab, var(--bg) 65%, transparent);
+    color: var(--fg); border-radius: var(--radius-sm);
+    backdrop-filter: blur(2px);
+  }
+  .m3-spinner-overlay.active { display: flex; }
+
+  /* Cascade schematic panels: titled card + dashed box with a 3-node SVG. */
+  .m3-schematic-card { display: flex; flex-direction: column; gap: 0.45rem; }
+  .m3-schematic-title {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--fg-muted);
+    font-weight: 600;
+  }
+  .m3-schematic-box {
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-md);
+    padding: 8px 10px;
+    min-height: 148px;
+    background: color-mix(in oklab, var(--fg) 4%, transparent);
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .m3-schematic-box svg { width: 100%; height: auto; display: block; }
+  .m3-schematic-empty {
+    font-size: var(--text-xs);
+    color: var(--fg-subtle);
+    line-height: 1.45;
+    text-align: center;
+  }
+
+  /* In-situ panel: tighten slider styling and prevent value labels from
+     pushing labels around on long values. */
+  .m3-insitu-sliders .form-range { padding: 0; margin-top: 2px; }
+  .m3-insitu-sliders label { gap: 0.5em; }
+  .m3-insitu-sliders label > span:last-child { font-variant-numeric: tabular-nums; }
+  /* On wide layouts, give the Render button breathing room from the trailing slider. */
+  @media (min-width: 992px) {
+    .m3-insitu-sliders .col-lg-auto { padding-left: var(--space-md); }
+    .m3-insitu-sliders .btn { min-width: 7rem; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Datasets</a></li>
+      <li class="breadcrumb-item">{{ dataset_name }}</li>
+      <li class="breadcrumb-item active" aria-current="page">{{ module_title }}</li>
+    </ol>
+  </nav>
+
+  <header class="module-header">
+    <h1>{{ module_title }}</h1>
+    <span class="module-meta">{{ dataset_name }}</span>
+  </header>
+
+  <div class="row g-3">
+    <div class="col-lg-3 m3-controls">
+      <div class="card">
+        <div class="card-body">
+          <p class="small text-muted mb-3">
+            Detect significant cell1 → cell2 → cell3 cascades by permutation-testing
+            MI co-localization. Heaviest step on first run.
+          </p>
+          <div class="row g-2 mb-2">
+            <div class="col-12">
+              <label for="m3-mi-threshold" class="small">MI threshold</label>
+              <input type="number" id="m3-mi-threshold" class="form-control form-control-sm" value="0.6" min="0" max="1" step="0.01">
+            </div>
+            <div class="col-12">
+              <label for="m3-zscore-thr" class="small">z-score threshold</label>
+              <input type="number" id="m3-zscore-thr" class="form-control form-control-sm" value="1.4" min="0" step="0.05">
+            </div>
+            <div class="col-12">
+              <label for="m3-padj-thr" class="small">adj-p threshold</label>
+              <input type="number" id="m3-padj-thr" class="form-control form-control-sm" value="0.001" min="0" step="0.001">
+            </div>
+            <div class="col-6">
+              <label for="m3-nperm" class="small">nperm</label>
+              <input type="number" id="m3-nperm" class="form-control form-control-sm" value="100" min="20" step="10">
+            </div>
+            <div class="col-6">
+              <label for="m3-fdr-alpha" class="small">FDR α</label>
+              <input type="number" id="m3-fdr-alpha" class="form-control form-control-sm" value="0.05" min="0" max="1" step="0.01">
+            </div>
+          </div>
+          <div class="form-check small mb-2">
+            <input class="form-check-input" type="checkbox" id="m3-force">
+            <label class="form-check-label" for="m3-force">Force recompute</label>
+          </div>
+          <button id="m3-run" class="btn btn-primary btn-sm w-100">
+            <i class="fas fa-play me-1"></i>Run cascade analysis
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-9 position-relative">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex justify-content-between mb-2 small text-muted">
+            <span id="m3-status">Configure thresholds, then click Run.</span>
+            <span id="m3-runtime"></span>
+          </div>
+
+          <div class="row g-3">
+            <div class="col-lg-7">
+              <div class="text-muted small mb-1">MI × MI z-score (clustered) — <span class="text-warning">★</span> = significant</div>
+              <div id="m3-heatmap"></div>
+            </div>
+            <div class="col-lg-5">
+              <div class="text-muted small mb-1">Significant MI cascade pairs · click a row to load triples</div>
+              <div id="m3-pair-table-wrap">
+                <table class="table table-sm table-hover m3-pair-table">
+                  <thead>
+                    <tr>
+                      <th>Pair</th>
+                      <th class="text-end">z</th>
+                      <th class="text-end">adj P</th>
+                      <th class="text-end">triples</th>
+                    </tr>
+                  </thead>
+                  <tbody id="m3-pair-tbody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <hr class="my-3">
+          <div class="text-muted small mb-1">
+            Cell-type triple proportions — top
+            <select id="m3-stem-topn" class="form-select form-select-sm d-inline-block" style="width: 5rem">
+              <option value="20" selected>20</option>
+              <option value="10">10</option>
+              <option value="50">50</option>
+            </select>
+          </div>
+          <div id="m3-stem"></div>
+
+          <div id="m3-spinner" class="m3-spinner-overlay">
+            <div class="text-center">
+              <div class="spinner-border" role="status"></div>
+              <div class="small mt-2">Running permutation test · this can take a while...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- In-situ cascade panel -->
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card position-relative">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-end gap-2 mb-3">
+            <h2 class="h5 mb-0 me-3">
+              <i class="fas fa-map-marker-alt text-primary me-2"></i>
+              In-situ cascade rendering
+            </h2>
+            <div>
+              <label for="m3-insitu-mi-up" class="small text-muted mb-0">Upstream MI</label>
+              <select id="m3-insitu-mi-up" class="form-select form-select-sm" style="min-width: 6.5rem"></select>
+            </div>
+            <div>
+              <label for="m3-insitu-mi-down" class="small text-muted mb-0">Downstream MI</label>
+              <select id="m3-insitu-mi-down" class="form-select form-select-sm" style="min-width: 6.5rem"></select>
+            </div>
+          </div>
+          {# --- Row 1: categorical selectors (Cell1/2/3, Slice) -------------- #}
+          <div class="row g-3 mb-3 m3-insitu-selectors">
+            <div class="col-6 col-md-3">
+              <label for="m3-insitu-cell1" class="small text-muted mb-1">Cell1</label>
+              <select id="m3-insitu-cell1" class="form-select form-select-sm w-100"></select>
+            </div>
+            <div class="col-6 col-md-3">
+              <label for="m3-insitu-cell2" class="small text-muted mb-1">Cell2</label>
+              <select id="m3-insitu-cell2" class="form-select form-select-sm w-100"></select>
+            </div>
+            <div class="col-6 col-md-3">
+              <label for="m3-insitu-cell3" class="small text-muted mb-1">Cell3</label>
+              <select id="m3-insitu-cell3" class="form-select form-select-sm w-100"></select>
+            </div>
+            <div class="col-6 col-md-3">
+              <label for="m3-insitu-slice" class="small text-muted mb-1">Slice</label>
+              <select id="m3-insitu-slice" class="form-select form-select-sm w-100"></select>
+            </div>
+          </div>
+
+          {# --- Row 2: continuous sliders + Render button ------------------ #}
+          <div class="row g-3 align-items-end mb-3 m3-insitu-sliders">
+            <div class="col-6 col-lg">
+              <label for="m3-insitu-mi-thr" class="small text-muted mb-1 d-flex justify-content-between">
+                <span>MI thr</span><span class="font-monospace" id="m3-insitu-mi-thr-val">0.60</span>
+              </label>
+              <input type="range" id="m3-insitu-mi-thr" class="form-range" value="0.6" min="0" max="1" step="0.01">
+            </div>
+            <div class="col-6 col-lg">
+              <label for="m3-insitu-cell-size" class="small text-muted mb-1 d-flex justify-content-between">
+                <span>Cell size</span><span class="font-monospace" id="m3-insitu-cell-size-val">6.0</span>
+              </label>
+              <input type="range" id="m3-insitu-cell-size" class="form-range" value="6" min="1" max="20" step="0.5">
+            </div>
+            <div class="col-6 col-lg">
+              <label for="m3-insitu-cell-alpha" class="small text-muted mb-1 d-flex justify-content-between">
+                <span>Cell alpha</span><span class="font-monospace" id="m3-insitu-cell-alpha-val">0.82</span>
+              </label>
+              <input type="range" id="m3-insitu-cell-alpha" class="form-range" value="0.82" min="0.05" max="1" step="0.05">
+            </div>
+            <div class="col-6 col-lg">
+              <label for="m3-insitu-edge-width" class="small text-muted mb-1 d-flex justify-content-between">
+                <span>Edge width</span><span class="font-monospace" id="m3-insitu-edge-width-val">1.2</span>
+              </label>
+              <input type="range" id="m3-insitu-edge-width" class="form-range" value="1.2" min="0.2" max="6" step="0.1">
+            </div>
+            <div class="col-6 col-lg">
+              <label for="m3-insitu-arrow-size" class="small text-muted mb-1 d-flex justify-content-between">
+                <span>Arrow size</span><span class="font-monospace" id="m3-insitu-arrow-size-val">0.55</span>
+              </label>
+              <input type="range" id="m3-insitu-arrow-size" class="form-range" value="0.55" min="0.1" max="2" step="0.05">
+            </div>
+            <div class="col-12 col-lg-auto">
+              <button id="m3-insitu-run" class="btn btn-primary btn-sm w-100 w-lg-auto" disabled>
+                <i class="fas fa-play me-1"></i>Render
+              </button>
+            </div>
+          </div>
+          <div id="m3-insitu-status" class="small text-muted mb-2"></div>
+          <div id="m3-insitu" style="min-height: 720px;"></div>
+          <div id="m3-insitu-spinner" class="m3-spinner-overlay">
+            <div class="text-center">
+              <div class="spinner-border" role="status"></div>
+              <div class="small mt-2">Rendering cascade...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- DEG / GO panel -->
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card position-relative">
+        <div class="card-body">
+          <div class="d-flex flex-wrap align-items-end gap-2 mb-2">
+            <h2 class="h5 mb-0 me-3">
+              <i class="fas fa-dna text-primary me-2"></i>
+              Cascade DEG &amp; GO
+            </h2>
+            <div>
+              <label for="m3-deg-direction" class="small text-muted mb-0">Direction</label>
+              <select id="m3-deg-direction" class="form-select form-select-sm" style="min-width: 6rem">
+                <option value="up" selected>up</option>
+                <option value="down">down</option>
+              </select>
+            </div>
+            <div>
+              <label for="m3-deg-lfc" class="small text-muted mb-0">log2FC ≥</label>
+              <input type="number" id="m3-deg-lfc" class="form-control form-control-sm" value="0.5" min="0" step="0.1" style="width: 6rem">
+            </div>
+            <div>
+              <label for="m3-deg-padj" class="small text-muted mb-0">padj ≤</label>
+              <input type="number" id="m3-deg-padj" class="form-control form-control-sm" value="0.05" min="0" max="1" step="0.01" style="width: 6rem">
+            </div>
+            <div>
+              <label class="small text-muted mb-0">Baseline up</label>
+              <select id="m3-deg-baseline-up" class="form-select form-select-sm" style="width: 7rem">
+                <option value="false" selected>inactive</option>
+                <option value="true">active</option>
+              </select>
+            </div>
+            <div>
+              <label class="small text-muted mb-0">Baseline down</label>
+              <select id="m3-deg-baseline-down" class="form-select form-select-sm" style="width: 7rem">
+                <option value="true" selected>active</option>
+                <option value="false">inactive</option>
+              </select>
+            </div>
+            <div class="ms-auto">
+              <button id="m3-deg-run" class="btn btn-primary btn-sm" disabled>
+                <i class="fas fa-play me-1"></i>Compute DEG + GO
+              </button>
+            </div>
+          </div>
+          <p class="small text-muted">
+            Interest = active upstream and active downstream MIs. Baseline = states
+            chosen above (with interest cells excluded). Welch t-test on log1p
+            counts; BH adjustment; Enrichr GO_BP.
+          </p>
+
+          {# --- Cascade schematics --------------------------------------- #}
+          <div class="row g-3 mb-3 m3-deg-schematics">
+            <div class="col-md-6">
+              <div class="m3-schematic-card">
+                <div class="m3-schematic-title">Current cascade of interest</div>
+                <div id="m3-deg-interest-schematic" class="m3-schematic-box">
+                  <div class="m3-schematic-empty">
+                    Select a significant MI pair and a (cell1 → cell2 → cell3) triple in the
+                    in-situ panel above to preview the cascade of interest.
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="col-md-6">
+              <div class="m3-schematic-card">
+                <div class="m3-schematic-title">Baseline cascade triplet structure</div>
+                <div id="m3-deg-baseline-schematic" class="m3-schematic-box">
+                  <div class="m3-schematic-empty">
+                    Inactive upstream / downstream selections remove the corresponding edge
+                    from the schematic.
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div id="m3-deg-status" class="small text-muted mb-2"></div>
+          <div class="row g-2">
+            <div class="col-md-4"><div id="m3-deg-pos1-volcano" style="min-height: 380px;"></div></div>
+            <div class="col-md-4"><div id="m3-deg-pos2-volcano" style="min-height: 380px;"></div></div>
+            <div class="col-md-4"><div id="m3-deg-pos3-volcano" style="min-height: 380px;"></div></div>
+            <div class="col-md-4"><div id="m3-deg-pos1-go" style="min-height: 320px;"></div></div>
+            <div class="col-md-4"><div id="m3-deg-pos2-go" style="min-height: 320px;"></div></div>
+            <div class="col-md-4"><div id="m3-deg-pos3-go" style="min-height: 320px;"></div></div>
+          </div>
+          <div id="m3-deg-spinner" class="m3-spinner-overlay">
+            <div class="text-center">
+              <div class="spinner-border" role="status"></div>
+              <div class="small mt-2">Running Welch t-test and GO enrichment...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.M3_BASE_URL = {{ url_for("module3_cascade.api_run", dataset_name=dataset_name) | tojson }}.replace(/\/api\/run$/, "");
+</script>
+<script src="{{ url_for('static', filename='js/m3_cascade.js') }}"></script>
+{% endblock %}

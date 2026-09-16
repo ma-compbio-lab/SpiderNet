@@ -1,0 +1,21 @@
+__pycache__/
+.ipynb_checkpoints/
+*.py[cod]
+# Keep final figures, tables and the small cascade plotting cache shareable.
+!output/**/
+!output/**/*.pdf
+!output/**/*.png
+!output/**/*.csv
+!output/**/*.json
+!output/**/MI_cascade_plot_matrices.pkl
+
+# Large detail tables are reserved for separate data publication.
+/output/V1/SpiderNet_Result_dim15/cellpair_LRpair_neigh_receiver_all.csv
+/output/V1/SpiderNet_Result_dim15/cellpair_LRpair_neigh_sender_all.csv
+/output/V1/SpiderNet_Result_dim15/Malignant_C5_CancerSEA_Angiogenesis_Hypoxia_Metastasis_score_by_cluster_gene_zscore_used_for_scoring.csv
+/output/V1/SpiderNet_Result_dim15/Malignant_C5_four_KEGG_pathway_module_score_by_cluster_celllevel_score.csv
+/output/V1/SpiderNet_Result_dim15/Malignant_C5_four_KEGG_pathway_module_score_by_cluster_singlecell_celllevel_scores.csv
+/output/V1/SpiderNet_Result_dim15/Malignant_C5_four_KEGG_pathway_module_score_by_cluster_zscore_mean_global_celllevel_scores_long.csv
+
+# Versioned data bundles are restored here locally.
+/output/

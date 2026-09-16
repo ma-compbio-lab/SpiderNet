@@ -1,0 +1,988 @@
+---
+title: "MI–CAF and Functional State Boxplot Analysis"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    number_sections: true
+---
+
+# Overview
+
+Plot the saved CAF and malignant-program scores with the original R Wilcoxon tests and SMD annotations.
+
+Run `python run_benchmarks.py --stage r-plots --plot-only` from this folder, or render this Rmd with R 4.6.1, `rmarkdown`, `knitr`, `ggplot2`, `dplyr`, `tibble`, and Pandoc.
+Inputs resolve from `HGSOC_LOCAL_RUN` (default `output/V1/SpiderNet_Result_dim15`) then `HGSOC_RUN_DIR` (default the matching shared `Results/HGSOC` run).
+PDF/PNG/CSV outputs use `HGSOC_R_OUTPUT` (default `output/r-plots`); the runner saves the executed document under `output/executed`.
+The R and Python statistical variants remain separate. Thresholds, tests, colors, and program selections are unchanged.
+
+# 1. Setup
+
+```{r setup, message=FALSE, warning=FALSE}
+knitr::opts_chunk$set(
+  echo = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.align = "center"
+)
+
+suppressPackageStartupMessages({
+  library(ggplot2)
+  library(dplyr)
+  library(knitr)
+  library(tibble)
+})
+```
+
+# 2. User settings
+
+Set the input/output environment variables above when relocating data. Keep the recorded scientific settings unchanged for reproduction.
+
+```{r user-settings}
+# =========================================================
+# Main input and output settings
+# =========================================================
+# Run from the HGSOC folder; the Python runner supplies these same paths.
+local_run_R <- Sys.getenv(
+  "HGSOC_LOCAL_RUN", file.path(getwd(), "output", "V1", "SpiderNet_Result_dim15")
+)
+upstream_run_R <- Sys.getenv(
+  "HGSOC_RUN_DIR", "D:/SpiderNet/Results/HGSOC/V1/SpiderNet_Result_dim15"
+)
+file_savepath_main <- Sys.getenv(
+  "HGSOC_R_OUTPUT", file.path(getwd(), "output", "r-plots")
+)
+dir.create(file_savepath_main, recursive = TRUE, showWarnings = FALSE)
+
+input_path_R <- function(filename) {
+  local_path <- file.path(local_run_R, filename)
+  if (file.exists(local_path)) return(local_path)
+  upstream_path <- file.path(upstream_run_R, filename)
+  if (file.exists(upstream_path)) return(upstream_path)
+  local_path
+}
+
+# Threshold used to split MI level into high and low groups
+thr_use <- 0.5
+thr_tag <- gsub("\\.", "p", sprintf("%.2f", thr_use))
+
+# =========================================================
+# Candidate column names
+# The script will automatically use the first matching column
+# =========================================================
+x_candidates <- c(
+  "MI_Level",
+  "Sending_MI10", "Sending_MI6", "Sending_MI13",
+  "Receiving_MI10", "Receiving_MI6", "Receiving_MI13"
+)
+
+caf_y_candidates <- c("CAF_Score", "CAF_score")
+state_y_candidates <- c("State_Score", "state_score")
+
+# =========================================================
+# Plot colors
+# =========================================================
+caf_fill_low    <- "#C2E2FA"
+caf_fill_high   <- "#B7A3E3"
+state_fill_low  <- "#FFF1CB"
+state_fill_high <- "#FF8F8F"
+```
+
+# 3. Helper functions
+
+These functions handle significance labels, automatic column selection, PDF export, summary statistics, and boxplot generation.
+
+```{r helper-functions}
+# =========================================================
+# Convert p-values to significance labels
+# =========================================================
+p_to_star <- function(p) {
+  if (is.na(p)) return("NA")
+  if (p < 1e-4) return("****")
+  if (p < 1e-3) return("***")
+  if (p < 1e-2) return("**")
+  if (p < 0.05) return("*")
+  return("ns")
+}
+
+# =========================================================
+# Return the first existing column from a candidate list
+# =========================================================
+pick_first_existing <- function(df, candidates) {
+  for (nm in candidates) {
+    if (nm %in% colnames(df)) return(nm)
+  }
+  stop(
+    paste0(
+      "None of these columns exist: ",
+      paste(candidates, collapse = ", ")
+    )
+  )
+}
+
+# =========================================================
+# Save a plot as a PDF file
+# =========================================================
+save_plot_pdf <- function(p, fn, width = 1.2, height = 2.6, out_dir = file_savepath_main) {
+  full <- file.path(out_dir, fn)
+  has_cairo <- capabilities("cairo")
+
+  if (has_cairo) {
+    ggsave(
+      filename = full,
+      plot = p,
+      width = width,
+      height = height,
+      dpi = 300,
+      device = cairo_pdf,
+      bg = "white"
+    )
+  } else {
+    ggsave(
+      filename = full,
+      plot = p,
+      width = width,
+      height = height,
+      dpi = 300,
+      bg = "white"
+    )
+  }
+}
+
+# =========================================================
+# Define a compact Nature-style plotting theme
+# =========================================================
+theme_nature <- function(base_size = 9, base_family = "Arial") {
+  theme_classic(base_size = base_size, base_family = base_family) %+replace%
+    theme(
+      plot.title = element_text(size = base_size, face = "plain", hjust = 0, color = "black"),
+      axis.title = element_text(size = base_size, color = "black"),
+      axis.text  = element_text(size = base_size - 1, color = "black"),
+      axis.line  = element_line(color = "black", linewidth = 0.35),
+      axis.ticks = element_line(color = "black", linewidth = 0.35),
+      axis.ticks.length = grid::unit(2, "pt"),
+      panel.border = element_blank(),
+      panel.grid = element_blank(),
+      legend.position = "none",
+      plot.background  = element_rect(fill = "white", color = NA),
+      panel.background = element_rect(fill = "white", color = NA)
+    )
+}
+
+# =========================================================
+# Summarize two groups defined by an MI threshold
+# =========================================================
+summarize_two_groups <- function(df, xcol, ycol, thr = 0.25) {
+  lvl_low  <- paste0("<", thr)
+  lvl_high <- paste0("\u2265", thr)
+
+  df2 <- df %>%
+    dplyr::filter(is.finite(.data[[xcol]]), is.finite(.data[[ycol]])) %>%
+    dplyr::mutate(
+      MI_group = ifelse(.data[[xcol]] >= thr, lvl_high, lvl_low),
+      MI_group = factor(MI_group, levels = c(lvl_high, lvl_low))
+    )
+
+  n_high <- sum(df2$MI_group == lvl_high, na.rm = TRUE)
+  n_low  <- sum(df2$MI_group == lvl_low, na.rm = TRUE)
+
+  m_high <- mean(df2[[ycol]][df2$MI_group == lvl_high], na.rm = TRUE)
+  m_low  <- mean(df2[[ycol]][df2$MI_group == lvl_low], na.rm = TRUE)
+  mean_diff <- m_high - m_low
+
+  if (is.finite(m_high) && is.finite(m_low) && m_high > 0 && m_low > 0) {
+    log2_mean_change <- log2(m_high / m_low)
+  } else {
+    log2_mean_change <- NA_real_
+  }
+
+  p_wilcox <- NA_real_
+  if (length(unique(stats::na.omit(df2$MI_group))) == 2) {
+    wt <- suppressWarnings(
+      wilcox.test(df2[[ycol]] ~ df2$MI_group, alternative = "two.sided")
+    )
+    p_wilcox <- wt$p.value
+  }
+
+  tibble(
+    x_column = xcol,
+    y_column = ycol,
+    threshold = thr,
+    n_high = n_high,
+    n_low = n_low,
+    mean_high = m_high,
+    mean_low = m_low,
+    mean_diff = mean_diff,
+    log2_mean_change = log2_mean_change,
+    p_wilcox = p_wilcox,
+    significance = p_to_star(p_wilcox)
+  )
+}
+
+# =========================================================
+# Build a boxplot comparing high and low MI groups
+# Notes:
+# - The high group (>= threshold) is shown first
+# - The low group (< threshold) is shown second
+# - Whisker caps are explicitly drawn with stat_boxplot()
+# =========================================================
+make_box_plot <- function(
+    df,
+    xcol,
+    ycol,
+    thr = 0.25,
+    fill_low = "#C2E2FA",
+    fill_high = "#B7A3E3",
+    title_txt = NULL,
+    xlab = NULL,
+    ylab = NULL
+) {
+  lvl_low  <- paste0("<", thr)
+  lvl_high <- paste0("\u2265", thr)
+
+  df2 <- df %>%
+    dplyr::filter(is.finite(.data[[xcol]]), is.finite(.data[[ycol]])) %>%
+    dplyr::mutate(
+      MI_group = ifelse(.data[[xcol]] >= thr, lvl_high, lvl_low),
+      MI_group = factor(MI_group, levels = c(lvl_high, lvl_low))
+    )
+
+  stats_df <- summarize_two_groups(df2, xcol, ycol, thr = thr)
+  p_wilcox <- stats_df$p_wilcox[[1]]
+  star <- stats_df$significance[[1]]
+
+  p_lbl <- ifelse(
+    is.na(p_wilcox),
+    "p = NA",
+    paste0("p = ", format(p_wilcox, digits = 2, scientific = TRUE))
+  )
+
+  y_top <- max(df2[[ycol]], na.rm = TRUE)
+  y_min <- min(df2[[ycol]], na.rm = TRUE)
+  y_rng <- y_top - y_min + 1e-12
+  y_anno <- y_top + 0.15 * y_rng
+
+  pal <- setNames(c(fill_high, fill_low), c(lvl_high, lvl_low))
+
+  ggplot(df2, aes(x = MI_group, y = .data[[ycol]], fill = MI_group)) +
+    stat_boxplot(
+      geom = "errorbar",
+      width = 0.22,
+      linewidth = 0.35,
+      color = "black"
+    ) +
+    geom_boxplot(
+      width = 0.58,
+      outlier.shape = NA,
+      linewidth = 0.35,
+      color = "black"
+    ) +
+    scale_fill_manual(values = pal, drop = FALSE) +
+    annotate(
+      "segment",
+      x = 1, xend = 2,
+      y = y_anno, yend = y_anno,
+      linewidth = 0.35, color = "black"
+    ) +
+    annotate(
+      "segment",
+      x = 1, xend = 1,
+      y = y_anno, yend = y_anno - 0.05 * y_anno,
+      linewidth = 0.35, color = "black"
+    ) +
+    annotate(
+      "segment",
+      x = 2, xend = 2,
+      y = y_anno, yend = y_anno - 0.05 * y_anno,
+      linewidth = 0.35, color = "black"
+    ) +
+    annotate(
+      "text",
+      x = 1.5,
+      y = y_anno + 0.03 * y_anno,
+      label = paste0(p_lbl, "  ", star),
+      size = 3.0,
+      vjust = 0,
+      family = "Arial",
+      color = "black"
+    ) +
+    coord_cartesian(clip = "off") +
+    labs(title = title_txt, x = xlab, y = ylab) +
+    theme_nature(base_size = 9, base_family = "Arial") +
+    theme(axis.text.x = element_text(size = 8, color = "black"))
+}
+```
+
+# 4. Load input data
+
+Each CSV file corresponds to one MI–phenotype comparison.
+
+```{r load-data}
+data_list <- list(
+  CAF_MI10           = read.csv(input_path_R("Malignant_COI5_CAF_score_vs_Sending_MI10_scatter.csv")),
+  CAF_MI6            = read.csv(input_path_R("Malignant_COI5_CAF_score_vs_Sending_MI6_scatter.csv")),
+  CAF_MI13           = read.csv(input_path_R("Malignant_COI5_CAF_score_vs_Sending_MI13_scatter.csv")),
+
+  Metastasis_MI10    = read.csv(input_path_R("Malignant_COI5_Metastasis_vs_Receiving_MI10_scatter.csv")),
+  Metastasis_MI6     = read.csv(input_path_R("Malignant_COI5_Metastasis_vs_Receiving_MI6_scatter.csv")),
+  Metastasis_MI13    = read.csv(input_path_R("Malignant_COI5_Metastasis_vs_Receiving_MI13_scatter.csv")),
+
+  Hypoxia_MI10       = read.csv(input_path_R("Malignant_COI5_Hypoxia_vs_Receiving_MI10_scatter.csv")),
+  Hypoxia_MI6        = read.csv(input_path_R("Malignant_COI5_Hypoxia_vs_Receiving_MI6_scatter.csv")),
+  Hypoxia_MI13       = read.csv(input_path_R("Malignant_COI5_Hypoxia_vs_Receiving_MI13_scatter.csv")),
+
+  Angiogenesis_MI10  = read.csv(input_path_R("Malignant_COI5_Angiogenesis_vs_Receiving_MI10_scatter.csv")),
+  Angiogenesis_MI6   = read.csv(input_path_R("Malignant_COI5_Angiogenesis_vs_Receiving_MI6_scatter.csv")),
+  Angiogenesis_MI13  = read.csv(input_path_R("Malignant_COI5_Angiogenesis_vs_Receiving_MI13_scatter.csv")),
+
+  Inflammation_MI6   = read.csv(input_path_R("Malignant_COI5_Inflammation_vs_Receiving_MI6_scatter.csv")),
+  Inflammation_MI10  = read.csv(input_path_R("Malignant_COI5_Inflammation_vs_Receiving_MI10_scatter.csv")),
+  Inflammation_MI13  = read.csv(input_path_R("Malignant_COI5_Inflammation_vs_Receiving_MI13_scatter.csv"))
+)
+
+names(data_list)
+```
+
+# 5. Define the analysis plan
+
+This table specifies which dataset to use, how the output file should be named, which candidate y-axis columns should be checked, and which color scheme should be applied.
+
+```{r analysis-specs}
+analysis_specs <- list(
+  list(key = "CAF_MI10",          prefix = "CAF_vs_SendingMI10",            y_candidates = caf_y_candidates,   fill_low = caf_fill_low,   fill_high = caf_fill_high),
+  list(key = "CAF_MI6",           prefix = "CAF_vs_SendingMI6",             y_candidates = caf_y_candidates,   fill_low = caf_fill_low,   fill_high = caf_fill_high),
+  list(key = "CAF_MI13",          prefix = "CAF_vs_SendingMI13",            y_candidates = caf_y_candidates,   fill_low = caf_fill_low,   fill_high = caf_fill_high),
+
+  list(key = "Metastasis_MI10",   prefix = "Metastasis_vs_ReceivingMI10",   y_candidates = state_y_candidates, fill_low = state_fill_low, fill_high = state_fill_high),
+  list(key = "Metastasis_MI6",    prefix = "Metastasis_vs_ReceivingMI6",    y_candidates = state_y_candidates, fill_low = state_fill_low, fill_high = state_fill_high),
+  list(key = "Metastasis_MI13",   prefix = "Metastasis_vs_ReceivingMI13",   y_candidates = state_y_candidates, fill_low = state_fill_low, fill_high = state_fill_high),
+
+  list(key = "Hypoxia_MI10",      prefix = "Hypoxia_vs_ReceivingMI10",      y_candidates = state_y_candidates, fill_low = state_fill_low, fill_high = state_fill_high),
+  list(key = "Hypoxia_MI6",       prefix = "Hypoxia_vs_ReceivingMI6",       y_candidates = state_y_candidates, fill_low = state_fill_low, fill_high = state_fill_high),
+  list(key = "Hypoxia_MI13",      prefix = "Hypoxia_vs_ReceivingMI13",      y_candidates = state_y_candidates, fill_low = state_fill_low, fill_high = state_fill_high),
+
+  list(key = "Angiogenesis_MI10", prefix = "Angiogenesis_vs_ReceivingMI10", y_candidates = state_y_candidates, fill_low = state_fill_low, fill_high = state_fill_high),
+  list(key = "Angiogenesis_MI6",  prefix = "Angiogenesis_vs_ReceivingMI6",  y_candidates = state_y_candidates, fill_low = state_fill_low, fill_high = state_fill_high),
+  list(key = "Angiogenesis_MI13", prefix = "Angiogenesis_vs_ReceivingMI13", y_candidates = state_y_candidates, fill_low = state_fill_low, fill_high = state_fill_high),
+
+  list(key = "Inflammation_MI6",  prefix = "Inflammation_vs_ReceivingMI6",  y_candidates = state_y_candidates, fill_low = state_fill_low, fill_high = state_fill_high),
+  list(key = "Inflammation_MI10", prefix = "Inflammation_vs_ReceivingMI10", y_candidates = state_y_candidates, fill_low = state_fill_low, fill_high = state_fill_high),
+  list(key = "Inflammation_MI13", prefix = "Inflammation_vs_ReceivingMI13", y_candidates = state_y_candidates, fill_low = state_fill_low, fill_high = state_fill_high)
+)
+```
+
+# 6. Run the analysis and save boxplots
+
+For each comparison, the notebook will detect the relevant columns, compute summary statistics, generate the boxplot, save it as a PDF, and store the result for later review.
+
+```{r run-analysis}
+plot_results <- list()
+all_boxplots <- list()
+summary_list <- list()
+
+for (spec in analysis_specs) {
+  message("Running: ", spec$prefix)
+
+  df <- data_list[[spec$key]]
+
+  xcol <- pick_first_existing(df, x_candidates)
+  ycol <- pick_first_existing(df, spec$y_candidates)
+
+  stats_df <- summarize_two_groups(
+    df = df,
+    xcol = xcol,
+    ycol = ycol,
+    thr = thr_use
+  ) %>%
+    mutate(
+      comparison = spec$prefix,
+      .before = 1
+    )
+
+  p_box <- make_box_plot(
+    df = df,
+    xcol = xcol,
+    ycol = ycol,
+    thr = thr_use,
+    fill_low = spec$fill_low,
+    fill_high = spec$fill_high,
+    title_txt = NULL,
+    xlab = NULL,
+    ylab = NULL
+  )
+
+  save_plot_pdf(
+    p = p_box,
+    fn = paste0(spec$prefix, "_box_wilcox_thr", thr_tag, ".pdf"),
+    width = 1.2,
+    height = 2.6
+  )
+
+  plot_results[[spec$key]] <- list(
+    data = df,
+    xcol = xcol,
+    ycol = ycol,
+    stats = stats_df,
+    box = p_box
+  )
+
+  all_boxplots[[spec$prefix]] <- p_box
+  summary_list[[spec$prefix]] <- stats_df
+}
+```
+
+# 7. Summary table
+
+This table provides a compact overview of all comparisons.
+
+```{r summary-table}
+summary_df <- bind_rows(summary_list) %>%
+  mutate(
+    mean_high = signif(mean_high, 4),
+    mean_low = signif(mean_low, 4),
+    mean_diff = signif(mean_diff, 4),
+    log2_mean_change = signif(log2_mean_change, 4),
+    p_wilcox = signif(p_wilcox, 4)
+  )
+
+kable(summary_df, align = "lcccccccccc")
+```
+
+# 8. Show all boxplots
+
+This section prints all boxplots for quick inspection inside the notebook.
+
+```{r show-plots, fig.width=2.2, fig.height=3.2}
+for (nm in names(all_boxplots)) {
+  message("Showing plot: ", nm)
+  print(all_boxplots[[nm]])
+}
+```
+
+# 9. Notes for users
+
+## What usually needs to be changed
+
+Use `HGSOC_LOCAL_RUN`, `HGSOC_RUN_DIR`, and `HGSOC_R_OUTPUT` to relocate files. Changing thresholds, file choices, or `analysis_specs` changes the analysis and is outside routine reproduction.
+
+## Expected input format
+
+Each CSV file should contain:
+
+- one MI-related column, such as `MI_Level`, `Sending_MI10`, or `Receiving_MI10`
+- one phenotype score column, such as `CAF_Score` or `State_Score`
+
+## Output files
+
+The notebook saves one PDF file per comparison to the following directory:
+
+```{r output-path, echo=FALSE}
+cat(file_savepath_main)
+```
+
+The output file names follow this pattern:
+
+- `CAF_vs_SendingMI10_box_wilcox_thr0p50.pdf`
+- `Metastasis_vs_ReceivingMI10_box_wilcox_thr0p50.pdf`
+
+# Session information
+
+```{r session-info}
+sessionInfo()
+```
+
+
+# 10. Final 3 × 4 MI-program summary figure
+
+This section generates one combined PDF figure matching the updated `HGSOC_Malignantsubtype_analysis` workflow. The rows are MI-10, MI-6, and MI-13. The columns are the four selected programs: CAF sig., PD-1/PD-L1 checkpoint, ECM-receptor interaction, and Hypoxia.
+
+```{r final-3x4-mi-program-figure, fig.width=8.2, fig.height=7.2}
+# =========================================================
+# Final 3 × 4 MI-program boxplot figure
+# ---------------------------------------------------------
+# Rows:
+#   MI-10, MI-6, MI-13
+# Columns:
+#   CAF sig., PD-1/PD-L1 checkpoint, ECM-receptor interaction, Hypoxia
+#
+# Annotation above each boxplot is: p-value stars + (SMD).
+# SMD is the standardized mean difference between MI-high and MI-low groups:
+#   SMD = (mean high - mean low) / pooled SD.
+# Box fill and edge colors are high = #3D91CE and low = #81B6DE;
+# all median lines are overlaid in white.
+#
+# Input CSVs expected from latest HGSOC_Malignantsubtype_analysis:
+#   CAF:
+#     Malignant_COI5_CAF_score_vs_Sending_MI{10,6,13}_scatter.csv
+#   KEGG direct cell-level results:
+#     Malignant_COI5_PD1_PDL1_vs_ReceivingMI{10,6,13}_celllevel_scatter.csv
+#     Malignant_COI5_ECM_receptor_vs_ReceivingMI{10,6,13}_celllevel_scatter.csv
+#   Hypoxia:
+#     Malignant_COI5_Hypoxia_vs_Receiving_MI{10,6,13}_scatter.csv
+#
+# Output:
+#   MI_CAF_functionalstate_3x4_CAF_PD1_ECM_Hypoxia_boxplot_SMD.pdf
+#   MI_CAF_functionalstate_3x4_CAF_PD1_ECM_Hypoxia_boxplot_SMD.png
+#   MI_CAF_functionalstate_3x4_CAF_PD1_ECM_Hypoxia_summary_SMD.csv
+# =========================================================
+
+suppressPackageStartupMessages({
+  library(ggplot2)
+  library(dplyr)
+  library(tibble)
+})
+
+# -----------------------------
+# Colors matching the example figure
+# -----------------------------
+plot_colors <- c(
+  "Sending MI-high"   = "#3D91CE",
+  "Sending MI-low"    = "#81B6DE",
+  "Receiving MI-high" = "#E83531",
+  "Receiving MI-low"  = "#D9ADAC"
+)
+
+plot_group_order <- c(
+  "Sending MI-high",
+  "Sending MI-low",
+  "Receiving MI-high",
+  "Receiving MI-low"
+)
+
+# -----------------------------
+# File-specification helpers
+# -----------------------------
+first_existing_file <- function(paths) {
+  for (p in paths) {
+    if (file.exists(p)) return(p)
+  }
+  return(NA_character_)
+}
+
+pick_first_existing_column <- function(df, candidates, file_label = "") {
+  for (nm in candidates) {
+    if (nm %in% colnames(df)) return(nm)
+  }
+  stop(
+    paste0(
+      "Cannot find any candidate column in ", file_label, ": ",
+      paste(candidates, collapse = ", "),
+      "\nAvailable columns: ", paste(colnames(df), collapse = ", ")
+    )
+  )
+}
+
+p_to_star_final <- function(p) {
+  if (is.na(p)) return("NA")
+  if (p < 1e-4) return("****")
+  if (p < 1e-3) return("***")
+  if (p < 1e-2) return("**")
+  if (p < 0.05) return("*")
+  return("ns")
+}
+
+# -----------------------------
+# 3 × 4 panel specification
+# -----------------------------
+mi_order <- c("MI-10", "MI-6", "MI-13")
+program_order <- c(
+  "CAF sig.",
+  "PD-1/PD-L1\ncheckpoint",
+  "ECM-receptor\ninteraction",
+  "Hypoxia"
+)
+
+panel_specs <- list(
+  # MI-10 row
+  list(
+    mi_row = "MI-10", program = "CAF sig.",
+    files = c(input_path_R("Malignant_COI5_CAF_score_vs_Sending_MI10_scatter.csv")),
+    x_candidates = c("MI_Level", "Sending_MI10", "Sending_MI_10", "Sending MI10"),
+    y_candidates = c("CAF_Score", "CAF_score", "State_Score", "state_score"),
+    high_label = "Sending MI-high", low_label = "Sending MI-low"
+  ),
+  list(
+    mi_row = "MI-10", program = "PD-1/PD-L1\ncheckpoint",
+    files = c(
+      input_path_R("Malignant_COI5_PD1_PDL1_vs_ReceivingMI10_celllevel_scatter.csv"),
+      input_path_R("Malignant_COI5_PD1_PDL1_vs_Receiving_MI10_scatter.csv")
+    ),
+    x_candidates = c("MI_Level", "Receiving_MI10", "Receiving_MI_10", "Receiving MI10"),
+    y_candidates = c("State_Score", "state_score", "pathway_module_score", "score"),
+    high_label = "Receiving MI-high", low_label = "Receiving MI-low"
+  ),
+  list(
+    mi_row = "MI-10", program = "ECM-receptor\ninteraction",
+    files = c(
+      input_path_R("Malignant_COI5_ECM_receptor_vs_ReceivingMI10_celllevel_scatter.csv"),
+      input_path_R("Malignant_COI5_ECM_receptor_vs_Receiving_MI10_scatter.csv")
+    ),
+    x_candidates = c("MI_Level", "Receiving_MI10", "Receiving_MI_10", "Receiving MI10"),
+    y_candidates = c("State_Score", "state_score", "pathway_module_score", "score"),
+    high_label = "Receiving MI-high", low_label = "Receiving MI-low"
+  ),
+  list(
+    mi_row = "MI-10", program = "Hypoxia",
+    files = c(
+      input_path_R("Malignant_COI5_Hypoxia_vs_Receiving_MI10_scatter.csv"),
+      input_path_R("Malignant_COI5_Hypoxia_vs_ReceivingMI10_celllevel_scatter.csv")
+    ),
+    x_candidates = c("MI_Level", "Receiving_MI10", "Receiving_MI_10", "Receiving MI10"),
+    y_candidates = c("State_Score", "state_score", "Hypoxia_score", "score"),
+    high_label = "Receiving MI-high", low_label = "Receiving MI-low"
+  ),
+
+  # MI-6 row
+  list(
+    mi_row = "MI-6", program = "CAF sig.",
+    files = c(input_path_R("Malignant_COI5_CAF_score_vs_Sending_MI6_scatter.csv")),
+    x_candidates = c("MI_Level", "Sending_MI6", "Sending_MI_6", "Sending MI6"),
+    y_candidates = c("CAF_Score", "CAF_score", "State_Score", "state_score"),
+    high_label = "Sending MI-high", low_label = "Sending MI-low"
+  ),
+  list(
+    mi_row = "MI-6", program = "PD-1/PD-L1\ncheckpoint",
+    files = c(
+      input_path_R("Malignant_COI5_PD1_PDL1_vs_ReceivingMI6_celllevel_scatter.csv"),
+      input_path_R("Malignant_COI5_PD1_PDL1_vs_Receiving_MI6_scatter.csv")
+    ),
+    x_candidates = c("MI_Level", "Receiving_MI6", "Receiving_MI_6", "Receiving MI6"),
+    y_candidates = c("State_Score", "state_score", "pathway_module_score", "score"),
+    high_label = "Receiving MI-high", low_label = "Receiving MI-low"
+  ),
+  list(
+    mi_row = "MI-6", program = "ECM-receptor\ninteraction",
+    files = c(
+      input_path_R("Malignant_COI5_ECM_receptor_vs_ReceivingMI6_celllevel_scatter.csv"),
+      input_path_R("Malignant_COI5_ECM_receptor_vs_Receiving_MI6_scatter.csv")
+    ),
+    x_candidates = c("MI_Level", "Receiving_MI6", "Receiving_MI_6", "Receiving MI6"),
+    y_candidates = c("State_Score", "state_score", "pathway_module_score", "score"),
+    high_label = "Receiving MI-high", low_label = "Receiving MI-low"
+  ),
+  list(
+    mi_row = "MI-6", program = "Hypoxia",
+    files = c(
+      input_path_R("Malignant_COI5_Hypoxia_vs_Receiving_MI6_scatter.csv"),
+      input_path_R("Malignant_COI5_Hypoxia_vs_ReceivingMI6_celllevel_scatter.csv")
+    ),
+    x_candidates = c("MI_Level", "Receiving_MI6", "Receiving_MI_6", "Receiving MI6"),
+    y_candidates = c("State_Score", "state_score", "Hypoxia_score", "score"),
+    high_label = "Receiving MI-high", low_label = "Receiving MI-low"
+  ),
+
+  # MI-13 row
+  list(
+    mi_row = "MI-13", program = "CAF sig.",
+    files = c(input_path_R("Malignant_COI5_CAF_score_vs_Sending_MI13_scatter.csv")),
+    x_candidates = c("MI_Level", "Sending_MI13", "Sending_MI_13", "Sending MI13"),
+    y_candidates = c("CAF_Score", "CAF_score", "State_Score", "state_score"),
+    high_label = "Sending MI-high", low_label = "Sending MI-low"
+  ),
+  list(
+    mi_row = "MI-13", program = "PD-1/PD-L1\ncheckpoint",
+    files = c(
+      input_path_R("Malignant_COI5_PD1_PDL1_vs_ReceivingMI13_celllevel_scatter.csv"),
+      input_path_R("Malignant_COI5_PD1_PDL1_vs_Receiving_MI13_scatter.csv")
+    ),
+    x_candidates = c("MI_Level", "Receiving_MI13", "Receiving_MI_13", "Receiving MI13"),
+    y_candidates = c("State_Score", "state_score", "pathway_module_score", "score"),
+    high_label = "Receiving MI-high", low_label = "Receiving MI-low"
+  ),
+  list(
+    mi_row = "MI-13", program = "ECM-receptor\ninteraction",
+    files = c(
+      input_path_R("Malignant_COI5_ECM_receptor_vs_ReceivingMI13_celllevel_scatter.csv"),
+      input_path_R("Malignant_COI5_ECM_receptor_vs_Receiving_MI13_scatter.csv")
+    ),
+    x_candidates = c("MI_Level", "Receiving_MI13", "Receiving_MI_13", "Receiving MI13"),
+    y_candidates = c("State_Score", "state_score", "pathway_module_score", "score"),
+    high_label = "Receiving MI-high", low_label = "Receiving MI-low"
+  ),
+  list(
+    mi_row = "MI-13", program = "Hypoxia",
+    files = c(
+      input_path_R("Malignant_COI5_Hypoxia_vs_Receiving_MI13_scatter.csv"),
+      input_path_R("Malignant_COI5_Hypoxia_vs_ReceivingMI13_celllevel_scatter.csv")
+    ),
+    x_candidates = c("MI_Level", "Receiving_MI13", "Receiving_MI_13", "Receiving MI13"),
+    y_candidates = c("State_Score", "state_score", "Hypoxia_score", "score"),
+    high_label = "Receiving MI-high", low_label = "Receiving MI-low"
+  )
+)
+
+# -----------------------------
+# Load and harmonize all 12 panels
+# -----------------------------
+panel_data_list <- list()
+panel_stats_list <- list()
+
+for (i in seq_along(panel_specs)) {
+  spec <- panel_specs[[i]]
+
+  fn <- first_existing_file(spec$files)
+  if (is.na(fn)) {
+    stop(
+      paste0(
+        "Cannot find input file for ", spec$mi_row, " / ", spec$program,
+        "\nTried:\n", paste(spec$files, collapse = "\n")
+      )
+    )
+  }
+
+  df_raw <- read.csv(fn, check.names = FALSE)
+  xcol <- pick_first_existing_column(df_raw, spec$x_candidates, file_label = fn)
+  ycol <- pick_first_existing_column(df_raw, spec$y_candidates, file_label = fn)
+
+  df_panel <- df_raw %>%
+    dplyr::mutate(
+      MI_Level_for_plot = suppressWarnings(as.numeric(.data[[xcol]])),
+      Score_for_plot = suppressWarnings(as.numeric(.data[[ycol]]))
+    ) %>%
+    dplyr::filter(is.finite(MI_Level_for_plot), is.finite(Score_for_plot)) %>%
+    dplyr::mutate(
+      MI_row = spec$mi_row,
+      Program = spec$program,
+      MI_group = ifelse(MI_Level_for_plot >= thr_use, spec$high_label, spec$low_label),
+      xpos = ifelse(MI_Level_for_plot >= thr_use, 1, 2),
+      input_file = fn,
+      x_column = xcol,
+      y_column = ycol
+    )
+
+  df_panel$MI_group <- factor(df_panel$MI_group, levels = plot_group_order)
+  df_panel$MI_row <- factor(df_panel$MI_row, levels = mi_order)
+  df_panel$Program <- factor(df_panel$Program, levels = program_order)
+
+  high_vals <- df_panel$Score_for_plot[df_panel$xpos == 1]
+  low_vals <- df_panel$Score_for_plot[df_panel$xpos == 2]
+
+  p_wilcox <- NA_real_
+  if (length(high_vals) > 0 && length(low_vals) > 0) {
+    p_wilcox <- suppressWarnings(
+      wilcox.test(high_vals, low_vals, alternative = "two.sided")$p.value
+    )
+  }
+
+  mean_high <- mean(high_vals, na.rm = TRUE)
+  mean_low <- mean(low_vals, na.rm = TRUE)
+  mean_diff <- mean_high - mean_low
+
+  sd_high <- stats::sd(high_vals, na.rm = TRUE)
+  sd_low <- stats::sd(low_vals, na.rm = TRUE)
+  n_high <- length(high_vals)
+  n_low <- length(low_vals)
+
+  pooled_sd <- NA_real_
+  if (n_high > 1 && n_low > 1 && is.finite(sd_high) && is.finite(sd_low)) {
+    pooled_sd <- sqrt(((n_high - 1) * sd_high^2 + (n_low - 1) * sd_low^2) / (n_high + n_low - 2))
+  }
+
+  smd <- ifelse(
+    is.finite(mean_high) & is.finite(mean_low) & is.finite(pooled_sd) & pooled_sd > 0,
+    (mean_high - mean_low) / pooled_sd,
+    NA_real_
+  )
+  smd_label <- ifelse(is.finite(smd), sprintf("%.2f", smd), "NA")
+
+  y_min <- min(df_panel$Score_for_plot, na.rm = TRUE)
+  y_max <- max(df_panel$Score_for_plot, na.rm = TRUE)
+  y_span <- max(y_max - y_min, 1e-6)
+
+  panel_stats <- tibble::tibble(
+    MI_row = spec$mi_row,
+    Program = spec$program,
+    n_high = n_high,
+    n_low = n_low,
+    mean_high = mean_high,
+    mean_low = mean_low,
+    mean_diff = mean_diff,
+    sd_high = sd_high,
+    sd_low = sd_low,
+    pooled_sd = pooled_sd,
+    SMD = smd,
+    p_wilcox = p_wilcox,
+    significance = p_to_star_final(p_wilcox),
+    label = paste0(p_to_star_final(p_wilcox), " (SMD = ", smd_label, ")"),
+    x = 1.5,
+    x_start = 1,
+    x_end = 2,
+    y_start = y_max + 0.08 * y_span,
+    y_text = y_max + 0.105 * y_span,
+    y_tick = 0.04 * y_span,
+    input_file = fn,
+    x_column = xcol,
+    y_column = ycol
+  )
+
+  panel_stats$MI_row <- factor(panel_stats$MI_row, levels = mi_order)
+  panel_stats$Program <- factor(panel_stats$Program, levels = program_order)
+
+  panel_data_list[[i]] <- df_panel
+  panel_stats_list[[i]] <- panel_stats
+}
+
+combined_panel_df <- dplyr::bind_rows(panel_data_list)
+combined_stats_df <- dplyr::bind_rows(panel_stats_list)
+
+combined_panel_df$MI_row <- factor(combined_panel_df$MI_row, levels = mi_order)
+combined_panel_df$Program <- factor(combined_panel_df$Program, levels = program_order)
+combined_panel_df$MI_group <- factor(combined_panel_df$MI_group, levels = plot_group_order)
+
+combined_stats_df$MI_row <- factor(combined_stats_df$MI_row, levels = mi_order)
+combined_stats_df$Program <- factor(combined_stats_df$Program, levels = program_order)
+
+# IMPORTANT:
+# Use one facet label per MI × program panel and facet_wrap(scales = "free_y")
+# below. ggplot2::facet_grid(scales = "free_y") still shares y scales within
+# each row, so panels in the same MI row share y-axis ticks.
+facet_panel_order <- unlist(lapply(mi_order, function(mi) paste(mi, program_order, sep = "\n")))
+
+combined_panel_df <- combined_panel_df %>%
+  dplyr::mutate(
+    Facet_panel = factor(
+      paste(as.character(MI_row), as.character(Program), sep = "\n"),
+      levels = facet_panel_order
+    )
+  )
+
+combined_stats_df <- combined_stats_df %>%
+  dplyr::mutate(
+    Facet_panel = factor(
+      paste(as.character(MI_row), as.character(Program), sep = "\n"),
+      levels = facet_panel_order
+    )
+  )
+
+# Median segments are drawn manually in white so that every boxplot has
+# a white median line while preserving high/low colored box edges.
+combined_median_df <- combined_panel_df %>%
+  dplyr::group_by(Facet_panel, MI_row, Program, xpos) %>%
+  dplyr::summarise(
+    median_score = median(Score_for_plot, na.rm = TRUE),
+    .groups = "drop"
+  ) %>%
+  dplyr::mutate(
+    x_start = xpos - 0.31,
+    x_end = xpos + 0.31
+  )
+
+combined_median_df$MI_row <- factor(combined_median_df$MI_row, levels = mi_order)
+combined_median_df$Program <- factor(combined_median_df$Program, levels = program_order)
+combined_median_df$Facet_panel <- factor(combined_median_df$Facet_panel, levels = facet_panel_order)
+
+summary_out <- file.path(
+  file_savepath_main,
+  paste0("MI_CAF_functionalstate_3x4_CAF_PD1_ECM_Hypoxia_summary_SMD_thr", thr_tag, ".csv")
+)
+write.csv(combined_stats_df, summary_out, row.names = FALSE)
+message("Saved 3x4 summary table: ", summary_out)
+
+# -----------------------------
+# Generate final 3 × 4 figure
+# -----------------------------
+p_3x4 <- ggplot(combined_panel_df, aes(x = xpos, y = Score_for_plot, group = interaction(MI_group, xpos))) +
+  geom_boxplot(
+    aes(fill = MI_group, color = MI_group),
+    width = 0.62,
+    outlier.shape = NA,
+    linewidth = 0.45
+  ) +
+  geom_segment(
+    data = combined_median_df,
+    aes(x = x_start, xend = x_end, y = median_score, yend = median_score),
+    inherit.aes = FALSE,
+    linewidth = 0.7,
+    color = "white",
+    lineend = "butt"
+  ) +
+  geom_segment(
+    data = combined_stats_df,
+    aes(x = x_start, xend = x_end, y = y_start, yend = y_start),
+    inherit.aes = FALSE,
+    linewidth = 0.45,
+    color = "black"
+  ) +
+  geom_segment(
+    data = combined_stats_df,
+    aes(x = x_start, xend = x_start, y = y_start, yend = y_start - y_tick),
+    inherit.aes = FALSE,
+    linewidth = 0.45,
+    color = "black"
+  ) +
+  geom_segment(
+    data = combined_stats_df,
+    aes(x = x_end, xend = x_end, y = y_start, yend = y_start - y_tick),
+    inherit.aes = FALSE,
+    linewidth = 0.45,
+    color = "black"
+  ) +
+  geom_text(
+    data = combined_stats_df,
+    aes(x = x, y = y_text, label = label),
+    inherit.aes = FALSE,
+    size = 4.2,
+    family = "Arial",
+    fontface = "plain",
+    color = "black"
+  ) +
+  scale_x_continuous(breaks = c(1, 2), labels = c("", ""), limits = c(0.55, 2.45)) +
+  scale_fill_manual(values = plot_colors, breaks = plot_group_order, drop = FALSE, name = NULL) +
+  scale_color_manual(values = plot_colors, breaks = plot_group_order, drop = FALSE, name = NULL) +
+  labs(x = NULL, y = "Mean expression") +
+  coord_cartesian(clip = "off") +
+  theme_classic(base_size = 13, base_family = "Arial") +
+  theme(
+    strip.placement = "outside",
+    strip.background = element_rect(fill = "#ECECEE", color = NA),
+    strip.text.x = element_text(size = 12.5, color = "black", margin = margin(t = 3, b = 3)),
+    strip.text.y.left = element_text(size = 12.5, color = "black", angle = 90, margin = margin(r = 4, l = 4)),
+    axis.title.y = element_text(size = 12, color = "black"),
+    axis.text.y = element_text(size = 10, color = "black"),
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line = element_line(color = "black", linewidth = 0.55),
+    axis.ticks.y = element_line(color = "black", linewidth = 0.55),
+    panel.spacing.x = grid::unit(1.0, "lines"),
+    panel.spacing.y = grid::unit(1.15, "lines"),
+    legend.position = "bottom",
+    legend.direction = "horizontal",
+    legend.title = element_blank(),
+    legend.text = element_text(size = 10.5, color = "black"),
+    legend.key.size = grid::unit(0.45, "cm"),
+    legend.spacing.x = grid::unit(0.35, "cm"),
+    plot.margin = margin(t = 6, r = 8, b = 4, l = 4),
+    plot.background = element_rect(fill = "white", color = NA),
+    panel.background = element_rect(fill = "white", color = NA)
+  ) +
+  guides(
+    fill = guide_legend(nrow = 2, byrow = TRUE, override.aes = list(linewidth = 0.7)),
+    color = "none"
+  ) +
+  # facet_wrap gives each MI × program panel its own y scale.
+  # Do not replace this with facet_grid(scales = "free_y"), because
+  # facet_grid still shares y-axis limits/ticks within the same row.
+  facet_wrap(~ Facet_panel, ncol = 4, scales = "free_y")
+
+pdf_out <- file.path(
+  file_savepath_main,
+  paste0("MI_CAF_functionalstate_3x4_CAF_PD1_ECM_Hypoxia_boxplot_SMD_thr", thr_tag, ".pdf")
+)
+png_out <- file.path(
+  file_savepath_main,
+  paste0("MI_CAF_functionalstate_3x4_CAF_PD1_ECM_Hypoxia_boxplot_SMD_thr", thr_tag, ".png")
+)
+
+if (capabilities("cairo")) {
+  ggsave(pdf_out, plot = p_3x4, width = 8.2, height = 7.2, device = cairo_pdf, bg = "white")
+} else {
+  ggsave(pdf_out, plot = p_3x4, width = 8.2, height = 7.2, bg = "white")
+}
+
+ggsave(png_out, plot = p_3x4, width = 8.2, height = 7.2, dpi = 300, bg = "white")
+
+message("Saved 3x4 PDF: ", pdf_out)
+message("Saved 3x4 PNG: ", png_out)
+
+print(p_3x4)
+```

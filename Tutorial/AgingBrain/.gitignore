@@ -1,0 +1,22 @@
+__pycache__/
+.ipynb_checkpoints/
+output/executed/
+# Keep publication figures and numerical tables shareable.
+!output/
+!output/**/*.csv
+!output/**/*.pdf
+!output/**/*.png
+!output/**/*.json
+!output/**/*.md
+# Inferred arrays, regressor caches and processed data inherit repository ignores.
+
+# Large detail tables are reserved for separate data publication.
+/output/coronal/aging_module_score_good_aging_genes_cellLFC_gt0p2_zscore_mean_global.csv
+/output/coronal/Aging_Tcell_sender_CCC_method_SMD_comparison/AgingBrain_Tcell_sender_any_receiver_CCC_selected_dimension_score_long.csv
+/output/coronal/Aging_Tcell_sender_CCC_method_SMD_comparison/Aging_module_score_global_zscore_mean.csv
+/output/coronal/Aging_Tcell_sender_CCC_method_SMD_comparison/Aging_module_score_good_aging_genes_cellLFC_gt0p2_global_zscore_mean.csv
+/output/sagittal/Sagittal_aging_module_score_CoronalGoodGenes_cellLFC_gt0p2_zscore_mean_global.csv
+/output/sagittal/Sagittal_aging_module_score_zscore_mean_global.csv
+
+# Versioned data bundles are restored here locally.
+/output/

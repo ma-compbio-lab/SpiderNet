@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import glob
 import os
 from pathlib import Path
+import hashlib
+import json
+from importlib.metadata import version, PackageNotFoundError
 
 import numpy as np
 import pandas as pd
 import scanpy as sc
-import sklearn.metrics
 from sklearn.decomposition import NMF
 from sklearn.neighbors import NearestNeighbors
 
@@ -43,15 +44,15 @@ def _resolve_first_existing_path(candidates):
 
 
 def resolve_data_root() -> Path:
-    return _resolve_first_existing_path(DATA_ROOT_CANDIDATES)
+    return Path(os.environ["SIMULATION_DATA_ROOT"]) if "SIMULATION_DATA_ROOT" in os.environ else _resolve_first_existing_path(DATA_ROOT_CANDIDATES)
 
 
 def resolve_result_root() -> Path:
-    return _resolve_first_existing_path(RESULT_ROOT_CANDIDATES)
+    return Path(os.environ["SIMULATION_RESULT_ROOT"]) if "SIMULATION_RESULT_ROOT" in os.environ else _resolve_first_existing_path(RESULT_ROOT_CANDIDATES)
 
 
 def resolve_spacia_analysis_root() -> Path:
-    return _resolve_first_existing_path(SPACIA_ANALYSIS_ROOT_CANDIDATES)
+    return Path(os.environ["SIMULATION_SPACIA_ROOT"]) if "SIMULATION_SPACIA_ROOT" in os.environ else _resolve_first_existing_path(SPACIA_ANALYSIS_ROOT_CANDIDATES)
 
 
 DATA_ROOT = resolve_data_root()
@@ -65,7 +66,96 @@ SCCCHAIN_RESULT_ROOT = RESULT_ROOT / "ScCChain"
 SPACIA_RESULT_ROOT = RESULT_ROOT / "Spacia"
 
 SCCCHAIN_ANALYSIS_ROOT = RESULT_ROOT / "ScCChain_analysis"
-MERGED_RESULT_ROOT = RESULT_ROOT / "Merged_Benchmark"
+OUTPUT_ROOT = Path(os.environ.get("SIMULATION_OUTPUT_ROOT", str(Path(__file__).resolve().parent / "output")))
+MERGED_RESULT_ROOT = OUTPUT_ROOT / "Merged_Benchmark"
+
+
+def _sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def insitu_cache_provenance(payload, parameters):
+    """Record exact inputs, analysis source, options and numerical environment."""
+    source_dir = Path(__file__).resolve().parent
+    inputs = {name: _sha256(Path(payload["data_dir"]) / name) for name in (
+        "gene_exp.csv", "cell_metadf.csv", "gene_metadf.csv", "edge_metadf.csv",
+        "spatial_location.csv", "adata_simulation.h5ad",
+    )}
+    inputs["SpiderNet/EdgeProgramScores.csv"] = _sha256(
+        get_local_result_dir("SpiderNet", payload["setting_name"], payload["experiment_idx"])
+        / "EdgeProgramScores.csv"
+    )
+    if parameters["load_compatible_spacia"]:
+        sample = f'{payload["setting_name"]}_Experiment_{payload["experiment_idx"]}'
+        folder = SPACIA_ANALYSIS_ROOT / payload["setting_name"] / f'Experiment_{payload["experiment_idx"]}'
+        for suffix in ("reference_edge_index.csv", "Spacia_edge_scores.npy"):
+            path = folder / f"{sample}_{suffix}"
+            inputs[f"Spacia/{suffix}"] = _sha256(path) if path.is_file() else None
+    versions = {}
+    for package in ("numpy", "pandas", "scipy", "scikit-learn", "commot", "scanpy"):
+        try:
+            versions[package] = version(package)
+        except PackageNotFoundError:
+            versions[package] = None
+    return {
+        "format": 1, "parameters": parameters, "inputs_sha256": inputs,
+        "source_sha256": {name: _sha256(source_dir / name) for name in (
+            "simulation_benchmark_utils.py", "Simulation_Benchmark_InSitu_Comparison.ipynb",
+            "ScCChain_runner.jl",
+        )},
+        "versions": versions,
+    }
+
+
+def save_insitu_cache(cache_path, payload, parameters, scores):
+    """Persist full precision scores only after the requested computations succeed."""
+    cache_path = Path(cache_path)
+    cache_path.parent.mkdir(parents=True, exist_ok=True)
+    expected_pairs = np.asarray(payload["edge_index"], dtype=np.int64)
+    for method, table in scores.items():
+        if not np.array_equal(table[["sender_index", "receiver_index"]].to_numpy(), expected_pairs):
+            raise ValueError(f"Cannot cache {method}: its reference graph differs.")
+    np.savez_compressed(cache_path, edge_index=expected_pairs,
+                        **{name: table[["MI-1", "MI-2"]].to_numpy(dtype=float)
+                           for name, table in scores.items()})
+    provenance = insitu_cache_provenance(payload, parameters)
+    provenance["methods"] = list(scores)
+    provenance["score_sources"] = {name: dict(table.attrs) for name, table in scores.items()}
+    provenance["scores_sha256"] = _sha256(cache_path)
+    cache_path.with_suffix(".json").write_text(json.dumps(provenance, indent=2), encoding="utf-8")
+
+
+def load_insitu_cache(cache_path, payload, parameters):
+    """Fail on absent/stale cache; plot-only never substitutes other method scores."""
+    cache_path = Path(cache_path)
+    metadata_path = cache_path.with_suffix(".json")
+    if not cache_path.is_file() or not metadata_path.is_file():
+        raise FileNotFoundError(f"Missing verified in-situ cache: {cache_path}. Run --stage insitu first.")
+    saved = json.loads(metadata_path.read_text(encoding="utf-8"))
+    current = insitu_cache_provenance(payload, parameters)
+    changed = [key for key, value in current.items() if saved.get(key) != value]
+    if saved.get("scores_sha256") != _sha256(cache_path):
+        changed.append("scores_sha256")
+    if changed:
+        raise ValueError(f"In-situ cache is stale ({', '.join(changed)}); run --stage insitu explicitly.")
+    scores = {}
+    with np.load(cache_path, allow_pickle=False) as arrays:
+        if not np.array_equal(arrays["edge_index"], payload["edge_index"]):
+            raise ValueError("Cached edge order differs from the selected data.")
+        for name in saved["methods"]:
+            values = arrays[name]
+            if values.shape != (len(payload["edge_index"]), 2):
+                raise ValueError(f"Invalid cached score shape for {name}: {values.shape}")
+            table = pd.DataFrame(payload["edge_index"], columns=["sender_index", "receiver_index"])
+            table[["MI-1", "MI-2"]] = values
+            table.attrs.update(saved["score_sources"].get(name, {}))
+            scores[name] = table
+    print(f"Plot-only: loaded verified scores from {cache_path}")
+    return scores
 
 METHOD_ORDER = ["SpiderNet", "COMMOT", "Spacia", "NMF-LR", "ScCChain"]
 METHOD_DISPLAY_NAMES = {
@@ -82,12 +172,6 @@ LOCAL_RESULT_SUBDIRS = {
     "COMMOT": "COMMOT_Result",
     "NMF-LR": "NMF_LR_Result",
 }
-
-
-def resolve_spacia_pipeline_metrics_path(setting_name: str, experiment_idx: int) -> Path:
-    exp_folder = experiment_name_from_index(experiment_idx)
-    sample_name = f"{setting_name}_{exp_folder}"
-    return SPACIA_ANALYSIS_ROOT / setting_name / exp_folder / f"{sample_name}_metrics.csv"
 
 
 def _coerce_edge_score_df(df):
@@ -179,12 +263,6 @@ def align_edge_scores_to_reference(edge_scores_df, edge_index, method_name="meth
         f"{method_name}: could not align edge scores to the reference graph. "
         f"CSV rows = {raw_df.shape[0]}, reference edges = {reference_pairs.shape[0]}."
     )
-
-
-def ensure_dir(path):
-    path = Path(path)
-    path.mkdir(parents=True, exist_ok=True)
-    return path
 
 
 def setting_name_from_index(setting_idx: int) -> str:
@@ -302,194 +380,6 @@ def safe_column_max_normalize(arr):
     return out
 
 
-def safe_row_normalize(arr):
-    arr = np.asarray(arr, dtype=float)
-    if arr.ndim == 1:
-        row_sum = np.nansum(arr)
-        if (not np.isfinite(row_sum)) or row_sum <= 0:
-            return np.zeros_like(arr, dtype=float)
-        out = arr / row_sum
-        out[~np.isfinite(out)] = 0.0
-        return out
-
-    out = arr.copy()
-    if out.size == 0:
-        return out
-    row_sum = np.nansum(out, axis=1, keepdims=True)
-    row_sum[(~np.isfinite(row_sum)) | (row_sum <= 0)] = 1.0
-    out = out / row_sum
-    out[~np.isfinite(out)] = 0.0
-    return out
-
-
-def get_best_component_scores(factor_matrix, edge_MI1, edge_MI2, mi_index):
-    factor_matrix = np.asarray(factor_matrix, dtype=float)
-    if factor_matrix.ndim == 1:
-        return safe_column_max_normalize(factor_matrix)
-    if factor_matrix.shape[1] == 0:
-        return np.zeros(factor_matrix.shape[0], dtype=float)
-
-    ref_edges = edge_MI1 if mi_index == 0 else edge_MI2
-    best_idx = int(np.argmax(np.mean(factor_matrix[ref_edges, :], axis=0)))
-    scores = factor_matrix[:, best_idx]
-    return safe_column_max_normalize(scores)
-
-
-def safe_binary_metrics(y_true, y_score):
-    y_true = np.asarray(y_true, dtype=np.int32)
-    y_score = np.asarray(y_score, dtype=float)
-    y_score = np.nan_to_num(y_score, nan=0.0, posinf=0.0, neginf=0.0)
-
-    if y_true.size == 0 or np.unique(y_true).shape[0] < 2:
-        return np.nan, np.nan
-
-    try:
-        auroc = sklearn.metrics.roc_auc_score(y_true, y_score)
-    except Exception:
-        auroc = np.nan
-
-    try:
-        auprc = sklearn.metrics.average_precision_score(y_true, y_score)
-    except Exception:
-        auprc = np.nan
-
-    return auroc, auprc
-
-
-def edge_factors_to_df(factor_matrix, edge_index, edgemeta_data):
-    factor_matrix = np.asarray(factor_matrix, dtype=float)
-    edge_MI1 = np.where(edgemeta_data["MetaItype"].values == "MI-1")[0]
-    edge_MI2 = np.where(edgemeta_data["MetaItype"].values == "MI-2")[0]
-    mi1_scores = get_best_component_scores(factor_matrix, edge_MI1=edge_MI1, edge_MI2=edge_MI2, mi_index=0)
-    mi2_scores = get_best_component_scores(factor_matrix, edge_MI1=edge_MI1, edge_MI2=edge_MI2, mi_index=1)
-    return pd.DataFrame(
-        {
-            "sender_index": edge_index[:, 0],
-            "receiver_index": edge_index[:, 1],
-            "MI-1": mi1_scores,
-            "MI-2": mi2_scores,
-        }
-    )
-
-
-def export_method_metrics(method_name, factor_matrix, edgemeta_data, edge_index, output_dir):
-    output_dir = ensure_dir(output_dir)
-
-    edge_MI1 = np.where(edgemeta_data["MetaItype"].values == "MI-1")[0]
-    edge_MI2 = np.where(edgemeta_data["MetaItype"].values == "MI-2")[0]
-    y_true_mi1 = (edgemeta_data["MetaItype"].values == "MI-1").astype(np.int32)
-    y_true_mi2 = (edgemeta_data["MetaItype"].values == "MI-2").astype(np.int32)
-
-    mi1_scores = get_best_component_scores(factor_matrix, edge_MI1=edge_MI1, edge_MI2=edge_MI2, mi_index=0)
-    mi2_scores = get_best_component_scores(factor_matrix, edge_MI1=edge_MI1, edge_MI2=edge_MI2, mi_index=1)
-
-    auroc_mi1, auprc_mi1 = safe_binary_metrics(y_true_mi1, mi1_scores)
-    auroc_mi2, auprc_mi2 = safe_binary_metrics(y_true_mi2, mi2_scores)
-
-    roc_df = pd.DataFrame([{"Method": method_name, "MI-1": auroc_mi1, "MI-2": auroc_mi2}])
-    prc_df = pd.DataFrame([{"Method": method_name, "MI-1": auprc_mi1, "MI-2": auprc_mi2}])
-    macro_df = pd.DataFrame(
-        [
-            {
-                "Method": method_name,
-                "Macro_AUROC": np.nanmean([auroc_mi1, auroc_mi2]),
-                "Macro_AUPRC": np.nanmean([auprc_mi1, auprc_mi2]),
-            }
-        ]
-    )
-    edge_scores_df = pd.DataFrame(
-        {
-            "sender_index": edge_index[:, 0],
-            "receiver_index": edge_index[:, 1],
-            "MI-1": mi1_scores,
-            "MI-2": mi2_scores,
-        }
-    )
-
-    roc_df.to_csv(output_dir / "ROC_AUROC_all.csv", index=False)
-    prc_df.to_csv(output_dir / "PUC_AUPRC_all.csv", index=False)
-    macro_df.to_csv(output_dir / "Benchmark_MacroMetrics.csv", index=False)
-    edge_scores_df.to_csv(output_dir / "EdgeProgramScores.csv", index=False)
-
-    return {
-        "roc": roc_df,
-        "prc": prc_df,
-        "macro": macro_df,
-        "edge_scores": edge_scores_df,
-    }
-
-
-def export_loading_summary(method_name, output_dir, lr_loading=None, sender_loading=None, receiver_loading=None):
-    output_dir = ensure_dir(output_dir)
-
-    lr_ratio = np.nan
-    sender_ratio = np.nan
-    receiver_ratio = np.nan
-
-    if lr_loading is not None:
-        loading_lr = safe_row_normalize(np.asarray(lr_loading, dtype=float))
-        n_lr = loading_lr.shape[1]
-        lr_split = max(1, n_lr // 2)
-        lr_idx_mi1 = np.arange(0, lr_split)
-        lr_idx_mi2 = np.arange(lr_split, n_lr)
-        lr_ratio = np.nanmean(
-            [
-                np.nansum(loading_lr[0, lr_idx_mi1]) if loading_lr.shape[0] >= 1 else np.nan,
-                np.nansum(loading_lr[1, lr_idx_mi2]) if loading_lr.shape[0] >= 2 else np.nan,
-            ]
-        )
-
-    if sender_loading is not None:
-        loading_sender = safe_row_normalize(np.asarray(sender_loading, dtype=float))
-        n_gene = loading_sender.shape[1]
-        reg_mid = min(50, n_gene)
-        reg_end = min(60, n_gene)
-        sender_idx_mi1 = np.arange(min(40, n_gene), reg_mid)
-        sender_idx_mi2 = np.arange(reg_mid, reg_end)
-        sender_ratio = np.nanmean(
-            [
-                np.nansum(loading_sender[0, sender_idx_mi1])
-                if (loading_sender.shape[0] >= 1 and sender_idx_mi1.size > 0)
-                else np.nan,
-                np.nansum(loading_sender[1, sender_idx_mi2])
-                if (loading_sender.shape[0] >= 2 and sender_idx_mi2.size > 0)
-                else np.nan,
-            ]
-        )
-
-    if receiver_loading is not None:
-        loading_receiver = safe_row_normalize(np.asarray(receiver_loading, dtype=float))
-        n_gene = loading_receiver.shape[1]
-        tar_start = min(60, n_gene)
-        tar_mid = min(70, n_gene)
-        tar_end = min(80, n_gene)
-        receiver_idx_mi1 = np.arange(tar_start, tar_mid)
-        receiver_idx_mi2 = np.arange(tar_mid, tar_end)
-        receiver_ratio = np.nanmean(
-            [
-                np.nansum(loading_receiver[0, receiver_idx_mi1])
-                if (loading_receiver.shape[0] >= 1 and receiver_idx_mi1.size > 0)
-                else np.nan,
-                np.nansum(loading_receiver[1, receiver_idx_mi2])
-                if (loading_receiver.shape[0] >= 2 and receiver_idx_mi2.size > 0)
-                else np.nan,
-            ]
-        )
-
-    df = pd.DataFrame(
-        [
-            {
-                "Method": method_name,
-                "LR_loading_ratio": lr_ratio,
-                "Sender_loading_ratio": sender_ratio,
-                "Receiver_loading_ratio": receiver_ratio,
-            }
-        ]
-    )
-    df.to_csv(output_dir / "LoadingRank_Ratio_Summary.csv", index=False)
-    return df
-
-
 # ---------------------------
 # Method-specific score loaders
 # ---------------------------
@@ -575,43 +465,6 @@ def compute_commot_scores(expression, gene_names, cell_names, spatial_pos, edge_
 # External method readers
 # ---------------------------
 
-def read_external_macro_metrics(sample_metrics_csv, method_name, setting_name, experiment_idx):
-    sample_metrics_csv = Path(sample_metrics_csv)
-    if not sample_metrics_csv.is_file():
-        return None
-    df = pd.read_csv(sample_metrics_csv)
-    if df.shape[0] == 0:
-        return None
-    row = df.iloc[0]
-    return pd.DataFrame(
-        [
-            {
-                "Method": method_name,
-                "Macro_AUROC": row.get("Macro_AUROC", np.nan),
-                "Macro_AUPRC": row.get("Macro_AUPRC", np.nan),
-                "Setting": setting_name,
-                "Experiment": experiment_idx,
-            }
-        ]
-    )
-
-
-def _glob_first(patterns):
-    for pattern in patterns:
-        matches = sorted(glob.glob(str(pattern)))
-        if matches:
-            return Path(matches[0])
-    return None
-
-
-def find_sccchain_csv(sample_result_root):
-    sample_result_root = Path(sample_result_root)
-    pattern = sample_result_root / "*_ScCChain_edge_program_scores.csv"
-    files = sorted(sample_result_root.glob("*_ScCChain_edge_program_scores.csv"))
-    if len(files) == 0:
-        raise FileNotFoundError(f"No ScCChain result file found in: {sample_result_root}")
-    return files[0]
-
 
 def load_sccchain_scores_to_reference_edges(sc_csv_path, edge_index):
     sc_df = pd.read_csv(sc_csv_path)
@@ -635,38 +488,6 @@ def load_sccchain_scores_to_reference_edges(sc_csv_path, edge_index):
     return safe_column_max_normalize(aligned_scores)
 
 
-# Backward-compatible alias for the earlier typo used in the notebook.
-load_scchain_scores_to_reference_edges = load_sccchain_scores_to_reference_edges
-
-
-def load_spacia_scores(spacia_h5ad_path, edge_index):
-    adata = sc.read_h5ad(spacia_h5ad_path)
-
-    interaction_scores = None
-    if "interaction_scores" in getattr(adata, "obsp", {}):
-        interaction_scores = adata.obsp["interaction_scores"]
-    elif "interaction_scores" in getattr(adata, "uns", {}):
-        interaction_scores = adata.uns["interaction_scores"]
-    else:
-        raise KeyError(
-            f"'interaction_scores' was not found in either adata.obsp or adata.uns for: {spacia_h5ad_path}"
-        )
-
-    interaction_scores = np.asarray(interaction_scores)
-    if interaction_scores.ndim != 3:
-        raise ValueError(
-            f"Expected Spacia interaction scores to be a 3D array, but got shape {interaction_scores.shape} "
-            f"from: {spacia_h5ad_path}"
-        )
-
-    factor_dim1 = np.mean(interaction_scores[:, :, 0:10], axis=2)
-    factor_dim2 = np.mean(interaction_scores[:, :, 10:20], axis=2)
-    factor_dim1_long = factor_dim1[edge_index[:, 0], edge_index[:, 1]]
-    factor_dim2_long = factor_dim2[edge_index[:, 0], edge_index[:, 1]]
-    factor = np.vstack([factor_dim1_long, factor_dim2_long]).T
-    return safe_column_max_normalize(factor)
-
-
 def read_edge_scores_csv(csv_path):
     csv_path = Path(csv_path)
     df = pd.read_csv(csv_path)
@@ -675,210 +496,3 @@ def read_edge_scores_csv(csv_path):
     if missing:
         raise ValueError(f"Missing columns in {csv_path}: {missing}")
     return _coerce_edge_score_df(df)
-
-
-def resolve_sccchain_score_csv(setting_name: str, experiment_idx: int) -> Path:
-    exp_folder = experiment_name_from_index(experiment_idx)
-    candidates = [
-        SCCCHAIN_ANALYSIS_ROOT / setting_name / exp_folder,
-        SCCCHAIN_RESULT_ROOT / setting_name / exp_folder,
-    ]
-    for base_dir in candidates:
-        if base_dir.is_dir():
-            try:
-                return find_sccchain_csv(base_dir)
-            except FileNotFoundError:
-                pass
-
-    patterns = [
-        SCCCHAIN_ANALYSIS_ROOT / setting_name / exp_folder / "*_ScCChain_edge_program_scores.csv",
-        SCCCHAIN_RESULT_ROOT / setting_name / exp_folder / "*_ScCChain_edge_program_scores.csv",
-    ]
-    out = _glob_first(patterns)
-    if out is None:
-        raise FileNotFoundError(
-            f"Could not find ScCChain edge-program scores for {setting_name} / {exp_folder} "
-            f"in either {SCCCHAIN_ANALYSIS_ROOT} or {SCCCHAIN_RESULT_ROOT}."
-        )
-    return out
-
-
-def resolve_spacia_edge_scores_csv(setting_name: str, experiment_idx: int) -> Path | None:
-    exp_folder = experiment_name_from_index(experiment_idx)
-    sample_name = f"{setting_name}_{exp_folder}"
-
-    direct_patterns = [
-        SPACIA_ANALYSIS_ROOT / setting_name / exp_folder / "EdgeProgramScores.csv",
-        SPACIA_ANALYSIS_ROOT / setting_name / exp_folder / f"{sample_name}_EdgeProgramScores.csv",
-        SPACIA_ANALYSIS_ROOT / setting_name / exp_folder / f"{sample_name}_edge_program_scores.csv",
-        SPACIA_RESULT_ROOT / setting_name / exp_folder / "EdgeProgramScores.csv",
-        SPACIA_RESULT_ROOT / setting_name / exp_folder / f"{sample_name}_EdgeProgramScores.csv",
-        SPACIA_RESULT_ROOT / setting_name / exp_folder / f"{sample_name}_edge_program_scores.csv",
-    ]
-    for path in direct_patterns:
-        if Path(path).is_file():
-            return Path(path)
-
-    glob_patterns = [
-        SPACIA_ANALYSIS_ROOT / setting_name / exp_folder / "*EdgeProgramScores*.csv",
-        SPACIA_ANALYSIS_ROOT / setting_name / exp_folder / "*edge_program_scores*.csv",
-        SPACIA_RESULT_ROOT / setting_name / exp_folder / "*EdgeProgramScores*.csv",
-        SPACIA_RESULT_ROOT / setting_name / exp_folder / "*edge_program_scores*.csv",
-    ]
-    out = _glob_first(glob_patterns)
-    if out is not None:
-        return out
-
-    search_roots = [
-        SPACIA_ANALYSIS_ROOT / setting_name / exp_folder,
-        SPACIA_RESULT_ROOT / setting_name / exp_folder,
-        SPACIA_RESULT_ROOT / f"{setting_name}_export",
-        SPACIA_ANALYSIS_ROOT / f"{setting_name}_export",
-        SPACIA_ANALYSIS_ROOT,
-        SPACIA_RESULT_ROOT,
-    ]
-    recursive_name_filters = [
-        f"*{sample_name}*EdgeProgramScores*.csv",
-        f"*{sample_name}*edge_program_scores*.csv",
-        f"*Experiment_{experiment_idx}*EdgeProgramScores*.csv",
-        f"*Experiment_{experiment_idx}*edge_program_scores*.csv",
-        "*Spacia*EdgeProgramScores*.csv",
-        "*spacia*edge_program_scores*.csv",
-    ]
-    for root in search_roots:
-        root = Path(root)
-        if not root.exists():
-            continue
-        for pat in recursive_name_filters:
-            matches = sorted(root.rglob(pat))
-            if matches:
-                return matches[0]
-    return None
-
-
-def resolve_spacia_h5ad_path(setting_name: str, experiment_idx: int) -> Path:
-    exp_folder = experiment_name_from_index(experiment_idx)
-    sample_name = f"{setting_name}_{exp_folder}"
-
-    patterns = [
-        SPACIA_RESULT_ROOT / f"{setting_name}_export" / f"Experiment_{experiment_idx}_compiled_spacia_output.h5ad",
-        SPACIA_RESULT_ROOT / f"{setting_name}_export" / f"{sample_name}_compiled_spacia_output.h5ad",
-        SPACIA_RESULT_ROOT / setting_name / exp_folder / "*compiled_spacia_output.h5ad",
-        SPACIA_RESULT_ROOT / setting_name / exp_folder / "*.h5ad",
-        SPACIA_ANALYSIS_ROOT / setting_name / exp_folder / f"{sample_name}_compiled_spacia_output.h5ad",
-        SPACIA_ANALYSIS_ROOT / setting_name / exp_folder / "*compiled_spacia_output.h5ad",
-        SPACIA_ANALYSIS_ROOT / setting_name / exp_folder / "*.h5ad",
-        SPACIA_ANALYSIS_ROOT / f"{setting_name}_export" / f"Experiment_{experiment_idx}_compiled_spacia_output.h5ad",
-        SPACIA_ANALYSIS_ROOT / f"{setting_name}_export" / f"{sample_name}_compiled_spacia_output.h5ad",
-    ]
-    out = _glob_first(patterns)
-    if out is not None:
-        return out
-
-    search_roots = [
-        SPACIA_ANALYSIS_ROOT / setting_name / exp_folder,
-        SPACIA_RESULT_ROOT / setting_name / exp_folder,
-        SPACIA_RESULT_ROOT / f"{setting_name}_export",
-        SPACIA_ANALYSIS_ROOT / f"{setting_name}_export",
-        SPACIA_ANALYSIS_ROOT,
-        SPACIA_RESULT_ROOT,
-    ]
-    recursive_name_filters = [
-        f"*{sample_name}*compiled*spacia*.h5ad",
-        f"*{sample_name}*.h5ad",
-        f"*Experiment_{experiment_idx}*compiled*spacia*.h5ad",
-        f"*Experiment_{experiment_idx}*.h5ad",
-        "*compiled_spacia_output*.h5ad",
-        "*spacia*.h5ad",
-    ]
-    for root in search_roots:
-        root = Path(root)
-        if not root.exists():
-            continue
-        for pat in recursive_name_filters:
-            matches = sorted(root.rglob(pat))
-            if matches:
-                return matches[0]
-
-    raise FileNotFoundError(
-        f"Could not find Spacia compiled output for {setting_name} / {exp_folder}. "
-        f"Checked both the direct export-style paths used by the benchmark pipeline and broader recursive "
-        f"searches under {SPACIA_RESULT_ROOT} and {SPACIA_ANALYSIS_ROOT}."
-    )
-
-
-
-def load_method_edge_scores_for_sample(setting_idx: int, experiment_idx: int, methods_to_show=None):
-    payload = load_simulation_inputs(setting_idx, experiment_idx)
-    setting_name = payload["setting_name"]
-    edge_index = payload["edge_index"]
-    edgemeta_data = payload["edgemeta_data"]
-
-    if methods_to_show is None:
-        methods_to_show = METHOD_ORDER.copy()
-
-    method_edge_scores = {}
-
-    local_csv_map = {
-        "SpiderNet": get_local_result_dir("SpiderNet", setting_name, experiment_idx) / "EdgeProgramScores.csv",
-        "COMMOT": get_local_result_dir("COMMOT", setting_name, experiment_idx) / "EdgeProgramScores.csv",
-        "NMF-LR": get_local_result_dir("NMF-LR", setting_name, experiment_idx) / "EdgeProgramScores.csv",
-    }
-    for method_name, csv_path in local_csv_map.items():
-        if method_name in methods_to_show and csv_path.is_file():
-            local_df = read_edge_scores_csv(csv_path)
-            if method_name == "SpiderNet":
-                local_df = align_edge_scores_to_reference(
-                    local_df,
-                    edge_index=edge_index,
-                    method_name=method_name,
-                )
-            else:
-                local_df.attrs["alignment_strategy"] = "legacy_raw_csv"
-                local_df.attrs["alignment_note"] = (
-                    f"{method_name}: using the original notebook behavior "
-                    f"(raw edge-score CSV without additional re-alignment)."
-                )
-            method_edge_scores[method_name] = local_df
-
-    if "ScCChain" in methods_to_show:
-        try:
-            sc_csv = resolve_sccchain_score_csv(setting_name, experiment_idx)
-            factor_sc = load_sccchain_scores_to_reference_edges(sc_csv, edge_index)
-            sc_df = edge_factors_to_df(factor_sc, edge_index, edgemeta_data)
-            sc_df.attrs["alignment_strategy"] = "legacy_reference_order"
-            sc_df.attrs["alignment_note"] = (
-                "ScCChain: using the original notebook behavior "
-                "(scores reconstructed directly on the reference edge order)."
-            )
-            method_edge_scores["ScCChain"] = sc_df
-        except Exception as e:
-            print(f"[Warning] ScCChain could not be loaded: {e}")
-
-    if "Spacia" in methods_to_show:
-        try:
-            spacia_edge_csv = resolve_spacia_edge_scores_csv(setting_name, experiment_idx)
-            if spacia_edge_csv is not None:
-                print(f"[Spacia] Using precomputed edge scores: {spacia_edge_csv}")
-                sp_df = read_edge_scores_csv(spacia_edge_csv)
-                sp_df.attrs["alignment_strategy"] = "legacy_raw_csv"
-                sp_df.attrs["alignment_note"] = (
-                    "Spacia: using the original notebook behavior "
-                    "(precomputed edge-score CSV without additional re-alignment)."
-                )
-                method_edge_scores["Spacia"] = sp_df
-            else:
-                spacia_h5ad = resolve_spacia_h5ad_path(setting_name, experiment_idx)
-                print(f"[Spacia] Using compiled output: {spacia_h5ad}")
-                factor_sp = load_spacia_scores(spacia_h5ad, edge_index)
-                sp_df = edge_factors_to_df(factor_sp, edge_index, edgemeta_data)
-                sp_df.attrs["alignment_strategy"] = "legacy_reference_order"
-                sp_df.attrs["alignment_note"] = (
-                    "Spacia: using the original notebook behavior "
-                    "(scores reconstructed directly on the reference edge order)."
-                )
-                method_edge_scores["Spacia"] = sp_df
-        except Exception as e:
-            print(f"[Warning] Spacia could not be loaded: {e}")
-
-    return payload, method_edge_scores
