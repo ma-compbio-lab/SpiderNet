@@ -57,7 +57,7 @@ The installable source is under `SpiderNet/SpiderNet/`; the root `pyproject.toml
 
 ### 3. Install optional dependencies
 
-Run these commands from the **repository root**, which contains this README and the outer `pyproject.toml`. Install only the optional dependencies needed for your workflows:
+The following commands work from either the **repository root** (containing `Tutorial/` and `scripts/data.py`) or the **inner `SpiderNet/` project directory**. The root requirements files forward to the maintained lists inside `SpiderNet/`, so dependency versions are maintained in one place. Install only the optional dependencies needed for your workflows:
 
 ```bash
 # Notebook and tutorial dependencies
@@ -70,18 +70,18 @@ python -m pip install -r requirements-UI.txt
 python -m pip install -r requirements-benchmark.txt
 ```
 
-If your current directory is the inner `SpiderNet/` directory (containing `requirements-UI.txt`), use `python -m pip install -r requirements-UI.txt` instead. Do not add another `SpiderNet/` prefix from that directory.
+Run these commands from a directory containing `requirements-UI.txt`, not from the Python source directory or the application directory. If you are already inside `SpiderNet-interactive/` beside `app.py`, use `python -m pip install -r ../requirements-UI.txt` instead.
 
-To install both UI and external-method benchmark dependencies together from the repository root:
+To install both UI and external-method benchmark dependencies together from either the repository root or the inner project directory:
 
 ```bash
-python -m pip install -r SpiderNet/requirements-UI.txt -r requirements-benchmark.txt
+python -m pip install -r requirements-UI.txt -r requirements-benchmark.txt
 python -m pip check
 ```
 
 The optional graph stack uses `igraph==0.11.9`, `leidenalg==0.10.2`, and `louvain==0.8.2`. COMMOT additionally uses `numpy==1.26.4`, `python-igraph==0.11.9`, `pysal==25.7`, and `tobler==0.12.1`. These constraints avoid the NumPy 2.x and igraph 1.x conflicts observed when installing unconstrained optional dependencies. The package extras also carry these constraints: `python -m pip install ".[interactive,benchmark]"`.
 
-Some R/R Markdown analyses require separate R packages; see [R requirements](Tutorial/R_requirements.md) and the relevant study README. `requirements-full-freeze.txt` is a historical development snapshot with conflicting optional dependency versions; do not use it as an installation requirements file or a validated lockfile.
+Some R/R Markdown analyses require separate R packages; see [R requirements](Tutorial/R_requirements.md) and the relevant study README. The former `requirements-full-freeze.txt` copies are preserved as a single [historical environment record](docs/environments/README.md), outside the installation requirements. That snapshot contains conflicting optional dependency versions and must not be used as an installation file or a validated lockfile.
 
 For Jupyter, register the environment as a notebook kernel:
 
@@ -237,10 +237,10 @@ SpiderNet-Interactive is a local Flask application for exploring trained SpiderN
 | **M3: MI cascades** | Permutation-tested MI cascades, cell-type triplets, spatial displays, and associated gene programs |
 | **M4: Spatial perturbation** | In silico gene knockdown or cell-type replacement using the trained model |
 
-From the repository root, install the UI dependencies and restore the interactive data profile:
+Start from the **repository root**, identified by `Tutorial/` and `scripts/data.py`. If you are in the inner `SpiderNet/` project directory, run `cd ..` first. Install the UI dependencies and restore the interactive data profile:
 
 ```bash
-python -m pip install -r SpiderNet/requirements-UI.txt
+python -m pip install -r requirements-UI.txt
 python scripts/data.py restore --profile interactive --archive-dir /path/to/archives
 cd SpiderNet/SpiderNet-interactive
 python app.py

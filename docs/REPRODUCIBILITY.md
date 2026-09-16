@@ -2,7 +2,7 @@
 
 ## 1. Use the matching environment
 
-Install the package from the repository root. Python 3.11 is required. Follow the [root installation guide](../README.md#installation) for PyTorch/PyG and the optional UI and benchmark requirements. `Tutorial/R_requirements.md` describes R dependencies. The recorded full freeze is a historical environment snapshot with conflicting optional dependency versions; do not install from it as a lockfile.
+Install the package from the repository root. Python 3.11 is required. Follow the [root installation guide](../README.md#installation) for PyTorch/PyG and the optional UI and benchmark requirements. `Tutorial/R_requirements.md` describes R dependencies. The [historical environment snapshot](environments/README.md) contains conflicting optional dependency versions; do not install from it as a lockfile.
 
 The optional requirements and package extras constrain the NumPy/igraph/PySAL stack to compatible versions. Run `python -m pip check` and the documented import checks after installation. Successful dependency and import checks do not establish numerical agreement of a complete analysis; verify the relevant study outputs separately.
 
@@ -64,4 +64,4 @@ The portable profiles and eight-study checks apply to the command-line workflows
 
 ## Interactive application
 
-Restore `--profile interactive`, install `SpiderNet/requirements-UI.txt`, and follow `SpiderNet/SpiderNet-interactive/README.md`. Dataset discovery uses the restored `SpiderNet/Interactivetool/SpiderNet-interactive_V2/` directory. UI caches and saved inputs are data assets, not part of the Python wheel.
+From the repository root, restore `--profile interactive`, install `requirements-UI.txt`, and follow `SpiderNet/SpiderNet-interactive/README.md`. Dataset discovery uses the restored `SpiderNet/Interactivetool/SpiderNet-interactive_V2/` directory. UI caches and saved inputs are data assets, not part of the Python wheel.

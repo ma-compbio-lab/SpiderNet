@@ -1,8 +1,2 @@
-jupyter
-jupyterlab
-ipykernel
-ipython
-ipywidgets
-openpyxl
-plotly
-kaleido
+# Repository-root entry point; dependency versions are maintained in SpiderNet/.
+-r SpiderNet/requirements-tutorial.txt
