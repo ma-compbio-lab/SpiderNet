@@ -4,7 +4,7 @@
 
 ## Overview
 
-![SpiderNet overview: learning directional meta-interactions and their biological applications](SpiderNet/SpiderNet-interactive/static/spidernet_method_hq.png)
+![SpiderNet overview: learning directional meta-interactions and their biological applications](SpiderNet/SpiderNet-interactive/static/SpiderNet_method_hq.png)
 
 SpiderNet is an interpretable deep learning framework for learning directional cell-cell meta-interactions (MIs) from spatial omics data.
 
