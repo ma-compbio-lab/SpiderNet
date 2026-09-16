@@ -1,1 +1,10 @@
-commot
+# Compatible optional benchmark stack for Python 3.11 and SpiderNet's NumPy 1.x API.
+# Keep aligned with the benchmark extra in both pyproject.toml files.
+commot==0.0.3
+karateclub==1.2.2
+numpy==1.26.4
+igraph==0.11.9
+python-igraph==0.11.9
+leidenalg==0.10.2
+pysal==25.7
+tobler==0.12.1

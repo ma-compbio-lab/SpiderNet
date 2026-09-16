@@ -52,14 +52,26 @@ tutorial = [
 ]
 
 interactive = [
-    "flask",
+    "flask>=3.0,<4.0",
+    "Werkzeug>=3.0,<4.0",
     "dash",
-    "plotly",
-    "kaleido"
+    "plotly>=5.20",
+    "kaleido",
+    "igraph==0.11.9",
+    "louvain==0.8.2",
+    "leidenalg==0.10.2",
+    "setuptools<82"
 ]
 
 benchmark = [
-    "commot"
+    "commot==0.0.3",
+    "karateclub==1.2.2",
+    "numpy==1.26.4",
+    "igraph==0.11.9",
+    "python-igraph==0.11.9",
+    "leidenalg==0.10.2",
+    "pysal==25.7",
+    "tobler==0.12.1"
 ]
 
 [tool.setuptools]

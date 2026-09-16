@@ -9,7 +9,8 @@ A local Flask application for exploring trained SpiderNet spatial-omics runs. It
 Use the environment that trained the runs, with SpiderNet and PyTorch/PyG installed as described in the [package README](../README.md#installation). From this directory:
 
 ```bash
-pip install -r ../requirements-UI.txt
+python -m pip install -r ../requirements-UI.txt
+python -m pip check
 python app.py
 ```
 

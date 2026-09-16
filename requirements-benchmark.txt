@@ -1,1 +1,2 @@
-commot
+# Shared benchmark pins; paths are resolved relative to this file.
+-r SpiderNet/requirements-benchmark.txt
