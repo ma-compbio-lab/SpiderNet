@@ -1,0 +1,263 @@
+{% extends "base.html" %}
+
+{% block title %}{{ module_title }} — {{ dataset_name }} — {{ app_title }}{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+<style>
+  .m1-controls { font-size: 0.92rem; }
+  .m1-controls label { font-weight: 500; margin-bottom: 0.15rem; }
+  .m1-multiselect { height: 11rem; }
+  .m1-meta-pill {
+    display: inline-block; padding: .15rem .55rem; border-radius: 999px;
+    background: var(--bg-subtle); color: var(--fg-muted);
+    font-size: var(--text-2xs); margin-right: .35rem;
+    border: 1px solid var(--border);
+    font-family: var(--font-mono); letter-spacing: 0;
+  }
+  #m1-spatial-canvas { min-height: 720px; background: var(--plot-bg); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+  #m1-circle-all, #m1-circle-slice { background: var(--plot-bg); border-radius: var(--radius-sm); border: 1px solid var(--border); }
+  .m1-spinner-overlay {
+    position: absolute; inset: 0; display: none;
+    align-items: center; justify-content: center;
+    background: color-mix(in oklab, var(--bg) 65%, transparent);
+    color: var(--fg); border-radius: var(--radius-sm);
+    backdrop-filter: blur(2px);
+  }
+  .m1-spinner-overlay.active { display: flex; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4">
+  <nav aria-label="breadcrumb">
+    <ol class="breadcrumb">
+      <li class="breadcrumb-item"><a href="{{ url_for('index') }}">Datasets</a></li>
+      <li class="breadcrumb-item">{{ dataset_name }}</li>
+      <li class="breadcrumb-item active" aria-current="page">{{ module_title }}</li>
+    </ol>
+  </nav>
+
+  <header class="module-header">
+    <h1>{{ module_title }}</h1>
+    <span class="module-meta">{{ dataset_name }}</span>
+    <span class="ms-auto">
+      <span class="m1-meta-pill">{{ n_slices }} slices</span>
+      <span class="m1-meta-pill">dim {{ dim_envir }}</span>
+    </span>
+  </header>
+
+  <div class="row g-3">
+    <!-- Left: controls -->
+    <div class="col-lg-3 m1-controls">
+      <div class="card">
+        <div class="card-body">
+          <div class="mb-3">
+            <label for="m1-slice">Slice</label>
+            <select id="m1-slice" class="form-select form-select-sm"></select>
+          </div>
+          <div class="mb-3">
+            <label for="m1-mi">Meta-interaction (MI)</label>
+            <select id="m1-mi" class="form-select form-select-sm"></select>
+          </div>
+
+          <div class="mb-3">
+            <label for="m1-threshold" class="d-flex justify-content-between">
+              <span>Edge threshold</span>
+              <span class="text-muted small" id="m1-threshold-value">—</span>
+            </label>
+            <input type="range" class="form-range" id="m1-threshold" min="0" max="1" step="0.001">
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-12">
+              <label for="m1-max-edges" class="small">Max edges</label>
+              <input type="number" class="form-control form-control-sm" id="m1-max-edges" value="12000" min="500" step="500">
+            </div>
+            <div class="col-12">
+              <label for="m1-marker-size" class="small d-flex justify-content-between">
+                <span>Cell size</span><span class="font-monospace text-muted" id="m1-marker-size-val">6.0</span>
+              </label>
+              <input type="range" class="form-range" id="m1-marker-size" value="6" min="1" max="20" step="0.5">
+            </div>
+            <div class="col-12">
+              <label for="m1-edge-width" class="small d-flex justify-content-between">
+                <span>Edge width</span><span class="font-monospace text-muted" id="m1-edge-width-val">1.2</span>
+              </label>
+              <input type="range" class="form-range" id="m1-edge-width" value="1.2" min="0.2" max="6" step="0.1">
+            </div>
+            <div class="col-12">
+              <label for="m1-arrow-size" class="small d-flex justify-content-between">
+                <span>Arrow size</span><span class="font-monospace text-muted" id="m1-arrow-size-val">0.55</span>
+              </label>
+              <input type="range" class="form-range" id="m1-arrow-size" value="0.55" min="0.1" max="2" step="0.05">
+            </div>
+            <div class="col-12">
+              <label for="m1-cell-alpha" class="small d-flex justify-content-between">
+                <span>Cell alpha</span><span class="font-monospace text-muted" id="m1-cell-alpha-val">0.90</span>
+              </label>
+              <input type="range" class="form-range" id="m1-cell-alpha" min="0.05" max="1" step="0.05" value="0.9">
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="d-flex justify-content-between">
+              <span>Sender cell types</span>
+              <button class="btn btn-sm btn-link p-0" id="m1-sender-clear">Clear</button>
+            </label>
+            <select id="m1-sender" class="form-select form-select-sm m1-multiselect" multiple></select>
+          </div>
+          <div class="mb-3">
+            <label class="d-flex justify-content-between">
+              <span>Receiver cell types</span>
+              <button class="btn btn-sm btn-link p-0" id="m1-receiver-clear">Clear</button>
+            </label>
+            <select id="m1-receiver" class="form-select form-select-sm m1-multiselect" multiple></select>
+          </div>
+
+          <div class="d-flex gap-2">
+            <button id="m1-render" class="btn btn-primary btn-sm flex-grow-1">
+              <i class="fas fa-sync-alt me-1"></i>Render
+            </button>
+            <button id="m1-select-all" class="btn btn-outline-secondary btn-sm" title="Select all sender + receiver cell types">
+              <i class="fas fa-check-double"></i>
+            </button>
+            <button id="m1-reset" class="btn btn-outline-secondary btn-sm" title="Reset to defaults">
+              <i class="fas fa-undo"></i>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right: figure -->
+    <div class="col-lg-9 position-relative">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2 small text-muted">
+            <span id="m1-status">Loading metadata...</span>
+            <span id="m1-counts"></span>
+          </div>
+          <div id="m1-spatial-canvas" class="position-relative">
+            <div id="m1-spinner" class="m1-spinner-overlay">
+              <div class="text-center">
+                <div class="spinner-border" role="status"></div>
+                <div class="small mt-2">Rendering...</div>
+              </div>
+            </div>
+          </div>
+          <p class="small text-muted mt-2 mb-0">
+            Controls auto-apply as you change them. Pan: drag · Zoom: scroll or box-select · Hover for cell / edge details.
+            Colorbar shows MI strength for visible edges.
+          </p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Cell-type interaction summary (chord/circle plots) -->
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card position-relative">
+        <div class="card-body">
+          <div class="d-flex align-items-center mb-2">
+            <h2 class="h5 mb-0 me-3">
+              <i class="fas fa-circle-nodes text-primary me-2"></i>
+              Cell-type interaction summary <span class="text-muted small ms-1" id="m1-circle-mi"></span>
+            </h2>
+          </div>
+          <p class="small text-muted mb-3">
+            Mean MI strength between every directed (sender → receiver) cell-type pair.
+            Pairs above 50% of the per-figure max are shown; loops indicate same-type interactions.
+          </p>
+          <div class="row g-3">
+            <div class="col-md-6">
+              <div class="text-muted small mb-1" id="m1-circle-all-title">All slices · cell-type interaction summary</div>
+              <div id="m1-circle-all" style="min-height: 420px;"></div>
+            </div>
+            <div class="col-md-6">
+              <div class="text-muted small mb-1" id="m1-circle-slice-title">Current slice · cell-type interaction summary</div>
+              <div id="m1-circle-slice" style="min-height: 420px;"></div>
+            </div>
+          </div>
+          <div id="m1-circle-spinner" class="m1-spinner-overlay">
+            <div class="text-center">
+              <div class="spinner-border" role="status"></div>
+              <div class="small mt-2">Computing interaction summary…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Loadings panel -->
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center mb-2">
+            <h2 class="h5 mb-0 me-3">
+              <i class="fas fa-list-ol text-primary me-2"></i>
+              Top loadings <span class="text-muted small ms-1" id="m1-loadings-mi"></span>
+            </h2>
+            <div class="ms-auto d-flex align-items-center gap-2">
+              <label for="m1-top-n" class="small text-muted mb-0">Top N</label>
+              <input type="number" id="m1-top-n" class="form-control form-control-sm"
+                     style="width:5.5rem" value="10" min="3" max="40" step="1">
+            </div>
+          </div>
+          <p class="small text-muted">
+            Per-MI normalized loadings. The most "{{ '{ MI-name }' }}-specific" features
+            within each panel are surfaced. Hover for exact values.
+          </p>
+          <div class="row g-2">
+            <div class="col-md-4"><div id="m1-stem-lr" style="min-height: 280px;"></div></div>
+            <div class="col-md-4"><div id="m1-stem-sender" style="min-height: 280px;"></div></div>
+            <div class="col-md-4"><div id="m1-stem-receiver" style="min-height: 280px;"></div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Enrichment heatmaps -->
+  <div class="row g-3 mt-1">
+    <div class="col-12">
+      <div class="card">
+        <div class="card-body">
+          <div class="d-flex align-items-center mb-2">
+            <h2 class="h5 mb-0 me-3">
+              <i class="fas fa-th text-primary me-2"></i>Enrichment heatmaps
+            </h2>
+            <button id="m1-enrichment-load" class="btn btn-outline-primary btn-sm ms-auto">
+              <i class="fas fa-play me-1"></i>Compute / show
+            </button>
+          </div>
+          <p class="small text-muted">
+            Pathway × MI loading and z-scored sender→receiver × MI tables. The
+            first compute can take ~30–60 s; results are cached on disk.
+          </p>
+          <div id="m1-enrichment-status" class="small text-muted mb-2"></div>
+          <div class="row g-3">
+            <div class="col-lg-7">
+              <div class="text-muted small mb-1">Sender → Receiver × MI (z-scored)</div>
+              <div id="m1-heatmap-celltype" style="min-height: 480px;"></div>
+            </div>
+            <div class="col-lg-5">
+              <div class="text-muted small mb-1">Pathway × MI loading</div>
+              <div id="m1-heatmap-lr-pathway" style="min-height: 480px;"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  window.M1_DATASET = {{ dataset_name | tojson }};
+  window.M1_BASE_URL = {{ url_for("module1_basic.api_meta", dataset_name=dataset_name) | tojson }}.replace(/\/api\/meta$/, "");
+</script>
+<script src="{{ url_for('static', filename='js/m1_basic.js') }}"></script>
+{% endblock %}

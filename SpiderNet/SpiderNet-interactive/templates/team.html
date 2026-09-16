@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+
+{% block title %}Team — {{ app_title }}{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 940px;">
+
+    <header class="hero" style="border-bottom: 1px solid var(--border); margin-bottom: var(--space-2xl);">
+        <p class="eyebrow">Team</p>
+        <h1 class="hero__title" style="max-width: 22ch;">
+            The researchers behind <em>SpiderNet</em>
+        </h1>
+    </header>
+
+    <section class="team-section fx-rise" aria-labelledby="team-pi">
+        <p class="eyebrow">Principal Investigator</p>
+        <div class="pi-card">
+            <h2 class="pi-card__name" id="team-pi">Jian Ma, Ph.D.</h2>
+            <p class="pi-card__role">Ray and Stephanie Lane Professor</p>
+            <p class="pi-card__affil">
+                Computational Biology Department<br>
+                School of Computer Science, Carnegie Mellon University
+            </p>
+            <a href="https://www.cs.cmu.edu/~jianma/" target="_blank" rel="noopener" class="btn btn-outline-primary btn-sm">
+                Lab website <i class="fas fa-arrow-up-right-from-square ms-1" aria-hidden="true"></i>
+            </a>
+        </div>
+    </section>
+
+    <section class="team-section" aria-labelledby="team-core">
+        <p class="eyebrow">Core development</p>
+        <h2 class="section-heading" id="team-core" style="font-size: var(--text-2xl);">
+            Researchers <em>&amp;</em> engineers
+        </h2>
+        <ul class="team-list fx-rise">
+            <li class="team-list__item">
+                <span class="team-list__name">Junjie Tang</span>
+                <span class="team-list__role">Postdoctoral Researcher</span>
+            </li>
+            <li class="team-list__item">
+                <span class="team-list__name">Shaoheng Liang</span>
+                <span class="team-list__role">Lane Fellow</span>
+            </li>
+            <li class="team-list__item">
+                <span class="team-list__name">Shahul Alam</span>
+                <span class="team-list__role">PhD Student</span>
+            </li>
+            <li class="team-list__item">
+                <span class="team-list__name">Wenduo Cheng</span>
+                <span class="team-list__role">PhD Student</span>
+            </li>
+            <li class="team-list__item">
+                <span class="team-list__name">Yang Zhang</span>
+                <span class="team-list__role">Project Scientist</span>
+            </li>
+        </ul>
+    </section>
+
+    <p class="mt-4">
+        <a href="{{ url_for('index') }}" class="btn btn-outline-secondary btn-sm">
+            <i class="fas fa-arrow-left me-1" aria-hidden="true"></i> Back to home
+        </a>
+    </p>
+</div>
+{% endblock %}

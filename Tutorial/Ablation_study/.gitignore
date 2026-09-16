@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+.ipynb_checkpoints/
+# Final figures and result tables are shareable.
+!output/
+!output/**/
+!output/**/*.csv
+!output/**/*.png
+!output/**/*.pdf
+
+# Versioned data bundles are restored here locally.
+/output/

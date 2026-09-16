@@ -1,5 +1,5 @@
 ---
-title: "GO Enrichment Visualization for MI29"
+title: "GO Enrichment Visualization for MI-29"
 author: "Junjie Tang"
 date: "`r Sys.Date()`"
 output:
@@ -21,19 +21,24 @@ knitr::opts_chunk$set(
 
 # Overview
 
-This R Markdown document generates two final GO enrichment bubble plots for MI29:
+This report visualizes the selected Gene Ontology (GO) biological process enrichment results for MI-29-associated sender regulators and receiver targets in the MERFISH ageing mouse brain dataset. It exports the two individual dot columns and a connected sender-receiver overview.
+
+The enrichment calculations and term selection are performed upstream in `AgingBrain_training_analysis.ipynb`. The input CSV files therefore contain precomputed enrichment statistics for the terms selected for the published panel; this report does not rerun GO enrichment or multiple-testing correction.
+
+It generates:
 
 - **p1**: GO enrichment of top regulators (sender side)
 - **p2**: GO enrichment of top targets (receiver side)
+- **connected_plot**: both columns with the manuscript's two schematic program-group ribbons
 
 The workflow is organized into four steps:
 
 1. Load required packages and input files.
-2. Clean and standardize the GO enrichment tables.
+2. Clean the displayed term labels and derive plotting quantities from the stored statistics.
 3. Define the final term order for the sender and receiver plots.
-4. Generate and save the two final figures.
+4. Generate the individual and connected plots as PNG/PDF files, with plotting data and ribbon-group CSVs.
 
-Only the final figures `p1` and `p2` are kept in this version. Intermediate figures from the original script have been removed.
+Ribbons represent the manuscript's program groupings. Their width is a layout choice, not an inferred interaction strength or a statistical test. Bubble sizes retain the shared scale derived from the original adjusted P values.
 
 # Load packages and define paths
 
@@ -42,13 +47,18 @@ library(ggplot2)
 library(dplyr)
 library(stringr)
 
-result_dir <- "D:/SpiderNet/Results/AgingBrain/V1/SpiderNet_Result_dim30"
+result_dir <- Sys.getenv(
+  "SPIDERNET_AGINGBRAIN_RESULT_DIR",
+  unset = "D:/SpiderNet/Results/AgingBrain/V1/SpiderNet_Result_dim30"
+)
 
 toptarget_file <- file.path(result_dir, "GO_enrichment_toptarget_MI29.csv")
 topregulator_file <- file.path(result_dir, "GO_enrichment_topregulator_MI29.csv")
 ```
 
 # Read input tables
+
+Each table is expected to contain `Term` and `Adjusted P-value`; base R converts the latter to `Adjusted.P.value` when reading the CSV file.
 
 ```{r read-data}
 GO_enrichment_toptarget_MI29 <- read.csv(toptarget_file)
@@ -63,8 +73,6 @@ prepare_go_df <- function(df) {
     mutate(
       # Remove GO accession IDs such as "(GO:XXXXXXX)" from the term labels.
       Term_clean = str_replace(Term, "\\s*\\(GO:\\d+\\)", ""),
-      # Extract the number of overlapping genes from strings such as "5/120".
-      GeneCount = as.numeric(sub("/.*", "", Overlap)),
       # Convert adjusted p-values to -log10 scale for plotting.
       logP = -log10(Adjusted.P.value)
     )
@@ -119,7 +127,7 @@ size_breaks <- c(2, 5, 8)
 
 # Plot p1: sender-side GO enrichment
 
-```{r plot-p1, fig.width=7.8, fig.height=7}
+```{r plot-p1, fig.width=15, fig.height=7}
 p1 <- ggplot(df_sender, aes(x = 1, y = Term_clean)) +
   geom_point(aes(size = logP), color = "#FD2D2D") +
   scale_size(
@@ -146,7 +154,7 @@ p1
 ggsave(
   file.path(result_dir, "GO_enrichment_topregulator_MI29_SingleColumn_BubblePlot.png"),
   plot = p1,
-  width = 7.8,
+  width = 15,
   height = 7,
   dpi = 300
 )
@@ -154,7 +162,7 @@ ggsave(
 ggsave(
   file.path(result_dir, "GO_enrichment_topregulator_MI29_SingleColumn_BubblePlot.pdf"),
   plot = p1,
-  width = 7.8,
+  width = 15,
   height = 7,
   dpi = 300
 )
@@ -201,6 +209,104 @@ ggsave(
   height = 7,
   dpi = 300
 )
+```
+
+# Connected sender-receiver programs
+
+The first five sender terms and first three receiver terms form the immune/cytokine
+group; the remaining two terms on each side form the senescence/DNA-repair group.
+Term selection, order, adjusted P values, bubble colour and size scale are shared
+with the individual plots. Only label wrapping and the combined layout differ.
+
+```{r connected-programs}
+build_program_column <- function(df, term_order, side, x, source_csv) {
+  ordered_terms <- rev(term_order)
+  if (anyDuplicated(as.character(df$Term_clean)) ||
+      !setequal(as.character(df$Term_clean), ordered_terms)) {
+    stop(paste(side, "GO terms are missing or duplicated; cannot draw a complete connected panel."))
+  }
+  column <- df[match(ordered_terms, as.character(df$Term_clean)), , drop = FALSE]
+  if (any(!is.finite(column$logP))) {
+    stop(paste(side, "contains non-finite enrichment sizes."))
+  }
+  column$Side <- side
+  column$DisplayOrder <- seq_len(nrow(column))
+  column$GO_ID <- str_extract(column$Term, "GO:[0-9]+")
+  column$DisplayTerm <- str_wrap(as.character(column$Term_clean), width = 34)
+  column$x <- x
+  column$y <- seq(6, 0, length.out = nrow(column))
+  column$ProgramGroup <- ifelse(column$DisplayOrder <= if (side == "Sender") 5 else 3,
+                                "immune", "senescence_repair")
+  column$SourceCSV <- basename(source_csv)
+  column$SourceMD5 <- unname(tools::md5sum(source_csv))
+  column
+}
+
+connected_data <- bind_rows(
+  build_program_column(df_sender, order_p1, "Sender", 0, topregulator_file),
+  build_program_column(df_receiver, order_p2, "Receiver", 1.8, toptarget_file)
+)
+
+group_connections <- data.frame(
+  ProgramGroup = c("immune", "senescence_repair"),
+  Description = c("Immune/cytokine processes and neighboring-cell immune responses",
+                  "Cellular senescence and neighboring-cell DNA repair"),
+  Meaning = "Manuscript-defined schematic grouping; ribbon width is not a statistic",
+  stringsAsFactors = FALSE
+)
+for (side in c("Sender", "Receiver")) {
+  group_connections[[paste0(side, "_GO_IDs")]] <- vapply(
+    group_connections$ProgramGroup,
+    function(group) paste(connected_data$GO_ID[
+      connected_data$Side == side & connected_data$ProgramGroup == group], collapse = ";"),
+    character(1)
+  )
+}
+
+program_ribbon <- function(group, sender_top, sender_bottom, receiver_top, receiver_bottom, bend) {
+  t <- seq(0, 1, length.out = 120)
+  smooth <- t^2 * (3 - 2 * t)
+  x <- 0.35 + (1.45 - 0.35) * t
+  top <- sender_top + (receiver_top - sender_top) * smooth - bend * 4 * t * (1 - t)
+  bottom <- sender_bottom + (receiver_bottom - sender_bottom) * smooth + bend * 4 * t * (1 - t)
+  data.frame(x = c(x, rev(x)), y = c(top, rev(bottom)), ProgramGroup = group)
+}
+ribbons <- bind_rows(
+  program_ribbon("immune", 6.40, 1.60, 6.40, 2.35, 0.50),
+  program_ribbon("senescence_repair", 1.40, -0.40, 2.15, -0.40, 0.22)
+)
+
+connected_plot <- ggplot() +
+  geom_polygon(data = ribbons, aes(x, y, group = ProgramGroup, fill = ProgramGroup),
+               show.legend = FALSE) +
+  scale_fill_manual(values = c(immune = "#f7c0c1", senescence_repair = "#b8acd0")) +
+  annotate("rect", xmin = c(-0.35, 1.45), xmax = c(0.35, 2.15),
+           ymin = -0.45, ymax = 6.45, fill = NA, colour = "#555555", linewidth = 0.4) +
+  geom_point(data = connected_data, aes(x, y, size = logP), colour = "#FD2D2D") +
+  geom_text(data = filter(connected_data, Side == "Sender"),
+            aes(x = x - 0.51, y = y, label = DisplayTerm),
+            hjust = 1, size = 3.8, lineheight = 0.95) +
+  geom_text(data = filter(connected_data, Side == "Receiver"),
+            aes(x = x + 0.51, y = y, label = DisplayTerm),
+            hjust = 0, size = 3.8, lineheight = 0.95) +
+  annotate("text", x = c(0, 1.8), y = 6.94,
+           label = c("MI-29 sender", "MI-29 receiver"), size = 4.0) +
+  scale_size(range = c(7, 15), limits = c(min_logP, max_logP), breaks = size_breaks,
+             name = "Enrichment significance\n-log10(adjusted P)") +
+  coord_cartesian(xlim = c(-4.9, 6.7), ylim = c(-0.65, 7.20), expand = FALSE, clip = "off") +
+  labs(title = "MI-29 molecular organization") +
+  theme_void(base_family = "sans") +
+  theme(plot.title = element_text(hjust = 0.5, size = 15, margin = margin(b = 12)),
+        legend.position = "bottom", legend.direction = "horizontal",
+        legend.title = element_text(size = 10), legend.text = element_text(size = 10),
+        plot.margin = margin(12, 12, 12, 12))
+
+connected_stem <- file.path(result_dir, "GO_enrichment_MI29_SenderReceiver_Connected_BubblePlot")
+ggsave(paste0(connected_stem, ".pdf"), connected_plot, width = 12, height = 7.2)
+ggsave(paste0(connected_stem, ".png"), connected_plot, width = 12, height = 7.2,
+       dpi = 300, bg = "white")
+write.csv(connected_data, paste0(connected_stem, "_data.csv"), row.names = FALSE)
+write.csv(group_connections, paste0(connected_stem, "_connections.csv"), row.names = FALSE)
 ```
 
 # Session information

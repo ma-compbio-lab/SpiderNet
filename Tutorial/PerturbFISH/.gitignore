@@ -1,0 +1,22 @@
+__pycache__/
+.ipynb_checkpoints/
+Rplots.pdf
+output/executed/
+# Keep final figures and tables shareable, including Enrichr report names.
+!output/
+!output/**/
+!output/**/*.csv
+!output/**/*.png
+!output/**/*.pdf
+!output/**/*.txt
+!output/**/*.json
+# Executed notebooks and runtime records are local; original notebooks are shared.
+output/executed/
+
+# Large detail tables are reserved for separate data publication.
+/output/Baseline_CCC_MI17_GO_SMD_melanoma_to_Tcell/melanoma_to_Tcell_edge_scores_all_methods_long_unfiltered.csv
+/output/Baseline_CCC_MI17_GO_SMD_melanoma_to_Tcell/PerturbFISH_edge_metadata_for_CCC_SMD.csv
+/output/Baseline_CCC_MI17_GO_SMD_melanoma_to_Tcell/SpiderNet_edge_scores.csv
+
+# Versioned data bundles are restored here locally.
+/output/

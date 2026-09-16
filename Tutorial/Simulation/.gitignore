@@ -1,0 +1,16 @@
+__pycache__/
+.ipynb_checkpoints/
+# The verified plotting cache is small and belongs with the shared figures/tables.
+!output/
+!output/**/
+!output/**/*.csv
+!output/**/*.pdf
+!output/**/*.png
+!output/**/insitu_scores.npz
+!output/**/insitu_scores.json
+!output/Merged_Benchmark/LoadingMeanRankRatio_definition.json
+!output/Merged_Benchmark/LoadingMeanRankRatio_all80_definition.json
+output/executed/
+
+# Versioned data bundles are restored here locally.
+/output/
