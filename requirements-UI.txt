@@ -1,0 +1,2 @@
+# Repository-root entry point; dependency versions are maintained in SpiderNet/.
+-r SpiderNet/requirements-UI.txt

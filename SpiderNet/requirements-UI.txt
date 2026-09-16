@@ -4,10 +4,10 @@
 # install is:
 #
 #     conda activate SpiderNet_env
-#     python -m pip install -r SpiderNet/requirements-UI.txt
+#     python -m pip install -r requirements-UI.txt
 #
-# Run the command above from the repository root. From this file's directory,
-# use: python -m pip install -r requirements-UI.txt
+# Run the command above from this file's directory or the repository root,
+# where a forwarding file includes this maintained dependency list.
 # Graph-library pins match the optional COMMOT stack; this is not a full lockfile.
 
 

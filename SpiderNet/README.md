@@ -7,7 +7,8 @@ SpiderNet is an interpretable deep learning framework for directional cell-cell 
 - `SpiderNet/`: Python package and ligand-receptor resources.
 - [../Tutorial/](../Tutorial/): the repository's eight study workflows, notebooks and R analyses.
 - [SpiderNet-interactive/](SpiderNet-interactive/README.md): local web application for trained runs.
-- `requirements*.txt`: core, tutorial, benchmark, UI, and recorded environment dependencies. `requirements-full-freeze.txt` is a historical snapshot with conflicting optional versions, not a validated installation lockfile.
+- `requirements*.txt`: maintained core, tutorial, benchmark, and UI dependency lists. The repository-root files forward to these lists.
+- [Historical environment record](../docs/environments/README.md): the former full-freeze snapshot, archived for reference rather than installation.
 
 ## Installation
 
@@ -31,7 +32,7 @@ python -m pip install -r requirements-UI.txt -r requirements-benchmark.txt
 python -m pip check
 ```
 
-The graph and benchmark dependencies are pinned to compatible versions for SpiderNet's NumPy 1.x environment. The `interactive` and `benchmark` package extras use the same constraints. See the [root installation guide](../README.md#3-install-optional-dependencies) for verification commands and instructions when working from the repository root.
+The same requirements commands also work from the repository root through its forwarding files. The graph and benchmark dependencies are pinned to compatible versions for SpiderNet's NumPy 1.x environment. The `interactive` and `benchmark` package extras use the same constraints. See the [root installation guide](../README.md#3-install-optional-dependencies) for verification commands.
 
 ## Usage
 
