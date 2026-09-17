@@ -1048,6 +1048,14 @@ label, .form-label { color: var(--fg); }
         transition-duration: 0.01ms !important;
         animation-iteration-count: 1 !important;
     }
+    /* Plotly measures SVG text synchronously after changing its transform.
+       Even a 0.01ms transition leaves stale geometry during that measurement,
+       separating hover text from its background. Disable it completely. */
+    .js-plotly-plot svg, .js-plotly-plot svg *,
+    #js-plotly-tester, #js-plotly-tester * {
+        transition: none !important;
+        animation: none !important;
+    }
 }
 
 /* ==========================================================================
