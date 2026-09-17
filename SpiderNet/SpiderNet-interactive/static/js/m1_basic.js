@@ -42,11 +42,11 @@
 
   $("m1-sender-clear").addEventListener("click", (e) => {
     e.preventDefault();
-    [...senderSel.options].forEach((o) => (o.selected = false));
+    setAllCelltypes(senderSel, false);
   });
   $("m1-receiver-clear").addEventListener("click", (e) => {
     e.preventDefault();
-    [...receiverSel.options].forEach((o) => (o.selected = false));
+    setAllCelltypes(receiverSel, false);
   });
 
   function setStatus(msg) { statusEl.textContent = msg; }
@@ -63,17 +63,37 @@
   }
 
   function fillMultiselect(sel, items) {
-    sel.innerHTML = "";
-    items.forEach((label) => {
-      const opt = document.createElement("option");
-      opt.value = label;
-      opt.textContent = label;
-      sel.appendChild(opt);
+    const previous = new Set(selectedValues(sel));
+    sel.replaceChildren();
+    items.forEach((label, index) => {
+      const row = document.createElement("label");
+      row.className = "m1-celltype-option";
+      const input = document.createElement("input");
+      input.type = "checkbox";
+      input.className = "form-check-input";
+      input.id = `${sel.id}-option-${index}`;
+      input.value = label;
+      input.checked = previous.has(label);
+      const text = document.createElement("span");
+      text.textContent = label;
+      row.append(input, text);
+      sel.appendChild(row);
     });
+    updateCelltypeSummary(sel);
   }
 
   function selectedValues(sel) {
-    return [...sel.selectedOptions].map((o) => o.value);
+    return [...sel.querySelectorAll('input[type="checkbox"]:checked')].map((o) => o.value);
+  }
+
+  function updateCelltypeSummary(sel) {
+    const count = selectedValues(sel).length;
+    $(`${sel.id}-summary`).textContent = count ? `${count} selected` : "All types (no filter)";
+  }
+
+  function setAllCelltypes(sel, checked) {
+    sel.querySelectorAll('input[type="checkbox"]').forEach((input) => { input.checked = checked; });
+    updateCelltypeSummary(sel);
   }
 
   async function fetchMeta() {
@@ -307,7 +327,14 @@
   // Max edges is still a number input; commit on `change`.
   maxEdges.addEventListener("change", () => scheduleRender(80));
   [senderSel, receiverSel].forEach((el) => {
-    el.addEventListener("change", () => scheduleRender(80));
+    el.addEventListener("change", () => {
+      updateCelltypeSummary(el);
+      scheduleRender(80);
+    });
+    $(`${el.id}-all`).addEventListener("click", () => {
+      setAllCelltypes(el, true);
+      scheduleRender(80);
+    });
   });
 
   // Range sliders fire `input` continuously while dragging — debounce harder
@@ -344,8 +371,8 @@
   miSel.addEventListener("change", onSliceOrMiChange);
 
   resetBtn.addEventListener("click", async () => {
-    [...senderSel.options].forEach((o) => (o.selected = false));
-    [...receiverSel.options].forEach((o) => (o.selected = false));
+    setAllCelltypes(senderSel, false);
+    setAllCelltypes(receiverSel, false);
     cellAlpha.value = 0.9;
     maxEdges.value = 12000;
     markerSize.value = 6;
@@ -355,8 +382,8 @@
   });
 
   $("m1-select-all").addEventListener("click", async () => {
-    [...senderSel.options].forEach((o) => (o.selected = true));
-    [...receiverSel.options].forEach((o) => (o.selected = true));
+    setAllCelltypes(senderSel, true);
+    setAllCelltypes(receiverSel, true);
     await render();
   });
 
