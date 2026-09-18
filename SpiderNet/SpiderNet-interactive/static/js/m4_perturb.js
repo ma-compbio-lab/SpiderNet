@@ -15,6 +15,10 @@
   const root = $("m4-root");
   const runBtn = $("m4-run");
   const runHint = $("m4-run-hint");
+  const prepareProgress = $("m4-prepare-progress");
+  const prepareRetry = $("m4-prepare-retry");
+  const enrichmentRetry = $("m4-enrichment-retry");
+  const enrichmentStatus = $("m4-enrichment-status");
 
   const modeKO = $("m4-mode-knockout");
   const modeRP = $("m4-mode-replacement");
@@ -59,6 +63,7 @@
   let LR_SELECTED = new Set(), SENDER_SELECTED = new Set(), RECEIVER_SELECTED = new Set();
   let CELLTYPES = [];
   let REFRESH_TIMER = null;
+  let REFRESH_VERSION = 0;
   let FETCHED_FEATURES_FOR_MI = null;
 
   function currentTheme() {
@@ -75,7 +80,7 @@
 
   function renderFig(el, fig) {
     if (!fig) return;
-    Plotly.react(el, fig.data, Object.assign({ autosize: true }, fig.layout),
+    window.spnRenderPlot(el, fig.data, Object.assign({ autosize: true }, fig.layout),
       { responsive: true, displaylogo: false, displayModeBar: false });
   }
 
@@ -91,28 +96,77 @@
   }
 
   async function getJson(path) {
-    const r = await fetch(`${BASE}${path}`);
-    const json = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(json.error || `${r.status} ${r.statusText}`);
-    return json;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10000);
+    try {
+      const r = await fetch(`${BASE}${path}`, { cache: "no-store", signal: controller.signal });
+      const json = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(json.error || `${r.status} ${r.statusText}`);
+      return json;
+    } finally {
+      clearTimeout(timeout);
+    }
+  }
+
+  async function recoverPreparation() {
+    // A broken HTTP connection does not necessarily stop server-side work.
+    // Observe the existing task rather than submitting another preparation.
+    let failures = 0;
+    while (true) {
+      let info, progress;
+      try {
+        info = await getJson("/api/state-info");
+        progress = await getJson("/api/prepare-progress");
+        failures = 0;
+      } catch (e) {
+        if (++failures >= 3) throw new Error(
+          "Connection to the application server was lost. Check the Python terminal, restart the server if needed, then click Retry model preparation."
+        );
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        continue;
+      }
+      if (info.loaded) return Object.assign({}, info, { elapsed_seconds: progress.elapsed_seconds });
+      if (progress.state === "error") throw new Error(progress.message);
+      if (progress.state !== "loading") throw new Error(
+        "The server has no active preparation task (it may have restarted). Click Retry model preparation."
+      );
+      await new Promise(resolve => setTimeout(resolve, 2000));
+    }
   }
 
   function fillMultiSelect(sel, items, defaultSelected = []) {
-    const prevSelected = new Set(
-      [...sel.selectedOptions].map((o) => o.value).concat(defaultSelected)
-    );
-    sel.innerHTML = "";
-    items.forEach((it) => {
-      const opt = document.createElement("option");
-      opt.value = String(it);
-      opt.textContent = String(it);
-      if (prevSelected.has(opt.value)) opt.selected = true;
-      sel.appendChild(opt);
+    const prevSelected = new Set(sel.dataset.initialized ? selectedValues(sel) : defaultSelected);
+    sel.replaceChildren();
+    items.forEach((it, index) => {
+      const label = document.createElement("label");
+      label.className = "m4-celltype-option";
+      const checkbox = document.createElement("input");
+      checkbox.type = "checkbox";
+      checkbox.className = "form-check-input";
+      checkbox.id = `${sel.id}-option-${index}`;
+      checkbox.value = String(it);
+      checkbox.checked = prevSelected.has(checkbox.value);
+      const text = document.createElement("span");
+      text.textContent = String(it);
+      label.append(checkbox, text);
+      sel.appendChild(label);
     });
+    sel.dataset.initialized = "true";
+    updateCelltypeSummary(sel);
   }
 
   function selectedValues(sel) {
-    return [...sel.selectedOptions].map((o) => o.value);
+    return [...sel.querySelectorAll('input[type="checkbox"]:checked')].map((o) => o.value);
+  }
+
+  function updateCelltypeSummary(sel) {
+    const count = selectedValues(sel).length;
+    $(`${sel.id}-summary`).textContent = count ? `${count} selected` : sel.dataset.emptyLabel;
+  }
+
+  function setCelltypes(sel, checked) {
+    sel.querySelectorAll('input[type="checkbox"]').forEach(input => { input.checked = checked; });
+    updateCelltypeSummary(sel);
   }
 
   function currentMode() {
@@ -159,16 +213,20 @@
     if (on) set.add(idx); else set.delete(idx);
   }
 
+  let featureVersion = 0;
   async function loadFeatureTables() {
     if (currentMode() !== "knockout") return;
     const miName = miSel.value;
     if (!miName) return;
     const topN = Math.max(5, Math.min(20, parseInt(topnInput.value, 10) || 10));
+    const version = ++featureVersion;
+    FETCHED_FEATURES_FOR_MI = null;
     featureSpinner.classList.add("active");
     try {
       const data = await postJson("/api/feature-tables", {
         mi_name: miName, top_n: topN, theme: currentTheme(),
       });
+      if (version !== featureVersion) return;
       LR_ROWS = data.lr_rows || [];
       SENDER_ROWS = data.sender_rows || [];
       RECEIVER_ROWS = data.receiver_rows || [];
@@ -184,9 +242,9 @@
       featureStatus.textContent = `${miName} · top ${topN}`;
       FETCHED_FEATURES_FOR_MI = `${miName}|${topN}`;
     } catch (e) {
-      featureStatus.textContent = `Error: ${e.message}`;
+      if (version === featureVersion) featureStatus.textContent = `Error: ${e.message}`;
     } finally {
-      featureSpinner.classList.remove("active");
+      if (version === featureVersion) featureSpinner.classList.remove("active");
     }
   }
 
@@ -263,6 +321,8 @@
     rows.push(`<div>Comparison cell types: ${(summary.target_celltypes || []).join(", ")}</div>`);
     rows.push(`<div>Cells used for DE: ${(summary.n_target_cells_used ?? 0).toLocaleString()} / ${(summary.n_target_cells_total ?? 0).toLocaleString()}${summary.subsampled_target_cells ? " (subsampled)" : ""}</div>`);
     rows.push(`<div>Genes shown at thresholds: ${summary.n_display_genes ?? 0}</div>`);
+    const counts = summary.enrichment_direction_counts;
+    if (counts) rows.push(`<div>Eligible in selected scope: ${counts.up} upregulated; ${counts.down} downregulated</div>`);
     rows.push(`<div>Genes used for enrichment: ${summary.n_enrichment_genes ?? 0}</div>`);
     rows.push(`<div>|log2FC| ≥ ${(summary.lfc_threshold ?? 0).toFixed(2)}, adj P &lt; ${(summary.padj_threshold ?? 0).toFixed(3)}</div>`);
     rows.push(`<hr class="my-2">`);
@@ -279,15 +339,42 @@
     renderFig(goDiv, data.go_figure);
     renderFig(keggDiv, data.kegg_figure);
     renderDETable(data.de_records || []);
+    const statuses = data.enrichment_status || {};
+    enrichmentStatus.textContent = Object.entries(statuses).map(([kind, status]) => {
+      const label = kind === "go" ? "GO BP" : "KEGG";
+      const stateLabel = { ok: "Results available.", empty: "Enrichr returned no terms.",
+        insufficient_genes: "Not run: fewer than 3 selected genes.", error: "Request failed; see message below." };
+      return `${label}: ${status.n_genes ?? 0} selected genes. ${status.library || ""} ${stateLabel[status.state] || ""}`;
+    }).join(" ");
+    enrichmentRetry.hidden = !Object.values(statuses).some(status => status.state === "error");
   }
 
   async function runPerturbation() {
+    const ids = ["m4-max-cells", "m4-lfc", "m4-padj", ...(currentMode() === "knockout" ? ["m4-topn", "m4-keep-pct"] : ["m4-seed"])];
+    if (!window.spnValidateInputs(ids, runHint)) return;
+    if (!selectedValues(targetTypesSel).length) { runHint.textContent = "Select at least one comparison cell type."; return; }
+    if (currentMode() === "knockout" && FETCHED_FEATURES_FOR_MI !== `${miSel.value}|${Number(topnInput.value)}`) {
+      runHint.textContent = "Wait for the selected MI feature tables to load, then retry.";
+      return;
+    }
+    if (currentMode() === "replacement") {
+      const donors = selectedValues(replacementTypesSel), replaced = selectedValues(replacedTypesSel);
+      if (!donors.length || !replaced.length || donors.some(v => replaced.includes(v))) {
+        runHint.textContent = "Select replacement and replaced cell types; the two groups must not overlap.";
+        return;
+      }
+    }
     runBtn.disabled = true;
+    runHint.textContent = "Running perturbation and differential expression...";
+    ++REFRESH_VERSION;
+    clearTimeout(REFRESH_TIMER);
     volcanoSpinner.classList.add("active");
     try {
       const data = await postJson("/api/run", buildRunPayload());
       applyRunResponse(data);
+      runHint.textContent = "Perturbation complete. Direction and threshold changes reuse the saved DE results.";
     } catch (e) {
+      runHint.textContent = "Perturbation failed. See the run summary for details.";
       renderSummary({ status: "error", error: e.message });
     } finally {
       volcanoSpinner.classList.remove("active");
@@ -297,6 +384,10 @@
 
   async function refreshFromCache() {
     if (!CURRENT_CACHE_KEY) return;
+    if (!window.spnValidateInputs(["m4-lfc", "m4-padj"], enrichmentStatus)) return;
+    const version = ++REFRESH_VERSION;
+    enrichmentRetry.disabled = true;
+    enrichmentStatus.textContent = "Updating enrichment from cached DE results...";
     try {
       const data = await postJson("/api/refresh", {
         cache_key: CURRENT_CACHE_KEY,
@@ -306,11 +397,18 @@
         enrich_scope: scopeSel.value,
         theme: currentTheme(),
       });
-      applyRunResponse(data);
+      if (version === REFRESH_VERSION) applyRunResponse(data);
     } catch (e) {
-      console.warn("M4 refresh failed", e);
+      if (version === REFRESH_VERSION) {
+        enrichmentStatus.textContent = `Could not update enrichment: ${e.message}`;
+        enrichmentRetry.hidden = false;
+      }
+    } finally {
+      if (version === REFRESH_VERSION) enrichmentRetry.disabled = false;
     }
   }
+
+  enrichmentRetry.addEventListener("click", refreshFromCache);
 
   function scheduleRefresh() {
     if (!CURRENT_CACHE_KEY) return;
@@ -329,6 +427,8 @@
   }
 
   async function bootstrap() {
+    prepareRetry.hidden = true;
+    prepareRetry.disabled = true;
     // Load LR/sender/receiver feature tables right away (no model needed).
     await loadFeatureTables();
 
@@ -346,14 +446,66 @@
 
     // Lazy-load the model + baseline.
     runBtn.disabled = true;
-    runHint.textContent = "Loading trained model & baseline predictions… (one-time, may take a minute)";
+    runHint.textContent = "Starting model and baseline preparation...";
+    prepareProgress.hidden = false;
+    prepareProgress.removeAttribute("value");
+    let polling = true;
+    let pollTimer = null;
+    let progressController = null;
+    const started = performance.now();
+    async function pollPreparation() {
+      progressController = new AbortController();
+      const timeout = setTimeout(() => progressController?.abort(), 10000);
+      try {
+        const r = await fetch(`${BASE}/api/prepare-progress`, {
+          cache: "no-store", signal: progressController.signal,
+        });
+        if (!r.ok) throw new Error(`Progress request failed: ${r.status}`);
+        const p = await r.json();
+        if (!polling) return;
+        const elapsed = p.state === "idle" ? (performance.now() - started) / 1000 : p.elapsed_seconds;
+        let detail = `${p.message} | elapsed ${Math.floor(elapsed)}s`;
+        if (p.state === "loading" && p.seconds_since_update >= 30) {
+          detail += ` | last step update ${Math.floor(p.seconds_since_update)}s ago; server responding`;
+        }
+        runHint.textContent = detail;
+        if (p.total > 0 && p.completed != null) {
+          prepareProgress.max = p.total;
+          prepareProgress.value = p.completed;
+          prepareProgress.setAttribute("aria-label", `${p.completed} of ${p.total} baseline slices completed`);
+        } else {
+          prepareProgress.removeAttribute("value");
+          prepareProgress.setAttribute("aria-label", "Model preparation in progress");
+        }
+      } catch (e) {
+        if (polling) runHint.textContent =
+          `Waiting for a server progress response | elapsed ${Math.floor((performance.now() - started) / 1000)}s. Check the application terminal; progress is currently unknown.`;
+      } finally {
+        clearTimeout(timeout);
+        if (polling) pollTimer = setTimeout(pollPreparation, 2000);
+      }
+    }
+    pollPreparation();
     try {
-      const prepared = await postJson("/api/prepare", {});
+      let prepared;
+      try {
+        prepared = await postJson("/api/prepare", {});
+      } catch (e) {
+        if (!(e instanceof TypeError)) throw e; // HTTP model errors remain visible.
+        prepared = await recoverPreparation();
+      }
       applyCelltypeOptions(prepared.available_celltypes);
       runBtn.disabled = false;
       runHint.textContent = `Model + baseline ready in ${prepared.elapsed_seconds}s · ${prepared.n_slices} slices · device=${prepared.device}`;
     } catch (e) {
-      runHint.textContent = `Failed to load model: ${e.message}`;
+      runHint.textContent = `Preparation did not complete: ${e.message}`;
+      prepareRetry.hidden = false;
+      prepareRetry.disabled = false;
+    } finally {
+      polling = false;
+      clearTimeout(pollTimer);
+      progressController?.abort();
+      prepareProgress.hidden = true;
     }
   }
 
@@ -365,16 +517,18 @@
   topnInput.addEventListener("change", loadFeatureTables);
 
   runBtn.addEventListener("click", runPerturbation);
+  prepareRetry.addEventListener("click", bootstrap);
+  [senderTypesSel, receiverTypesSel, replacementTypesSel, replacedTypesSel, targetTypesSel].forEach(sel => {
+    sel.addEventListener("change", () => updateCelltypeSummary(sel));
+    $(`${sel.id}-all`).addEventListener("click", () => setCelltypes(sel, true));
+    $(`${sel.id}-clear`).addEventListener("click", () => setCelltypes(sel, false));
+  });
 
   [lfcInput, padjInput, directionSel, scopeSel].forEach((el) => {
     el.addEventListener("change", scheduleRefresh);
   });
 
-  // Re-render server-themed Plotly figures when the user toggles theme.
-  window.addEventListener("spn:themechange", () => {
-    loadFeatureTables();
-    if (CURRENT_CACHE_KEY) refreshFromCache();
-  });
+  // Theme changes restyle existing plots through the shared helpers in main.js.
 
   // -- go ----------------------------------------------------------------
   bootstrap();

@@ -137,7 +137,7 @@
   }
 
   function renderStem(targetEl, fig) {
-    Plotly.react(
+    window.spnRenderPlot(
       targetEl,
       fig.data,
       Object.assign({ autosize: true }, fig.layout),
@@ -192,9 +192,9 @@
       circleMiLabel.textContent = `· ${data.mi_name}`;
       circleAllTitle.textContent = data.all_title;
       circleSliceTitle.textContent = data.slice_title;
-      Plotly.react(circleAll, data.all_figure.data, data.all_figure.layout,
+      window.spnRenderPlot(circleAll, data.all_figure.data, data.all_figure.layout,
         { responsive: true, displaylogo: false, displayModeBar: false });
-      Plotly.react(circleSlice, data.slice_figure.data, data.slice_figure.layout,
+      window.spnRenderPlot(circleSlice, data.slice_figure.data, data.slice_figure.layout,
         { responsive: true, displaylogo: false, displayModeBar: false });
     } catch (err) {
       if (reqId !== circleInflight) return;
@@ -225,9 +225,9 @@
       const dt = ((performance.now() - t0) / 1000).toFixed(1);
       const ct = data.celltype_pair;
       const lr = data.lr_pathway;
-      Plotly.react(heatmapCelltype, ct.figure.data, ct.figure.layout,
+      window.spnRenderPlot(heatmapCelltype, ct.figure.data, ct.figure.layout,
         { responsive: true, displaylogo: false });
-      Plotly.react(heatmapLrPathway, lr.figure.data, lr.figure.layout,
+      window.spnRenderPlot(heatmapLrPathway, lr.figure.data, lr.figure.layout,
         { responsive: true, displaylogo: false });
       enrichStatus.textContent =
         `Loaded in ${dt}s · ${ct.n_pairs} celltype pairs above z=${ct.threshold.toFixed(2)} · ` +
@@ -242,10 +242,13 @@
   }
   enrichBtn.addEventListener("click", loadEnrichment);
 
+  let boundVersion = 0, boundsPending = false;
   async function refreshSliceBound() {
     const sliceIdx = parseInt(sliceSel.value, 10);
     const miIdx = parseInt(miSel.value, 10);
+    const version = ++boundVersion;
     const def = await fetchThresholdDefault(sliceIdx, miIdx);
+    if (version !== boundVersion) return false;
     thrInput.min = def.vmin;
     thrInput.max = Math.max(def.vmax, def.vmin + 1e-6);
     thrInput.step = (def.vmax - def.vmin) / 1000 || 0.001;
@@ -255,6 +258,7 @@
 
     fillMultiselect(senderSel, def.available_sender_celltypes);
     fillMultiselect(receiverSel, def.available_receiver_celltypes);
+    return true;
   }
 
   thrInput.addEventListener("input", () => {
@@ -264,6 +268,8 @@
 
   let spatialInflight = 0;
   async function render() {
+    if (boundsPending) return;
+    if (!window.spnValidateInputs(["m1-max-edges"], statusEl)) return;
     const reqId = ++spatialInflight;
     setSpinner(true);
     try {
@@ -285,7 +291,7 @@
       if (reqId !== spatialInflight) return;        // stale, skip
       const dt = ((performance.now() - t0) / 1000).toFixed(2);
       const fig = result.figure;
-      Plotly.react(
+      window.spnRenderPlot(
         "m1-spatial-canvas",
         fig.data,
         fig.layout,
@@ -351,20 +357,22 @@
   $("m1-receiver-clear").addEventListener("click", () => scheduleRender(80));
 
   // When slice or MI changes, refresh threshold range + celltype lists + loadings.
-  let bindBusy = false;
+  let bindVersion = 0;
   async function onSliceOrMiChange() {
-    if (bindBusy) return;
-    bindBusy = true;
+    const version = ++bindVersion;
+    boundsPending = true;
+    ++spatialInflight;
+    clearTimeout(renderTimer);
     setSpinner(true);
     try {
-      await refreshSliceBound();
+      if (!await refreshSliceBound() || version !== bindVersion) return;
+      boundsPending = false;
       // Spatial render, loadings refresh, and circle summary refresh run in parallel.
       await Promise.all([render(), refreshLoadings(), refreshCircleSummary()]);
     } catch (err) {
       setStatus(`Error: ${err.message}`);
     } finally {
-      bindBusy = false;
-      setSpinner(false);
+      if (version === bindVersion) { boundsPending = false; setSpinner(false); }
     }
   }
   sliceSel.addEventListener("change", onSliceOrMiChange);
@@ -378,6 +386,10 @@
     markerSize.value = 6;
     edgeWidth.value = 1.2;
     arrowSize.value = 0.55;
+    $("m1-marker-size-val").textContent = "6.0";
+    $("m1-edge-width-val").textContent = "1.2";
+    $("m1-arrow-size-val").textContent = "0.55";
+    $("m1-cell-alpha-val").textContent = "0.90";
     await onSliceOrMiChange();
   });
 
@@ -409,13 +421,5 @@
     }
   })();
 
-  // Re-render server-themed Plotly figures when the user toggles theme.
-  // Includes the spatial canvas — the figure has the theme baked in by the
-  // server, so it must be re-fetched, not just re-skinned client-side.
-  window.addEventListener("spn:themechange", () => {
-    render();
-    refreshLoadings();
-    refreshCircleSummary();
-    if (enrichmentLoaded) loadEnrichment();
-  });
+  // Theme changes restyle existing plots through the shared helpers in main.js.
 })();

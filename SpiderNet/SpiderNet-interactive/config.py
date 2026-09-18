@@ -17,5 +17,6 @@ PORT = 8000
 # Application title
 APP_TITLE = "SpiderNet: Interpretable modeling of intercellular meta-interactions"
 
-# Debug mode
-DEBUG = True
+# Normal analysis must not be interrupted by the development auto-reloader.
+# Set True explicitly only for development.
+DEBUG = False

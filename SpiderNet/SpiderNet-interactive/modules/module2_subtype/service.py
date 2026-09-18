@@ -11,12 +11,16 @@ recomputed per request. DEG + GO/KEGG are deferred to milestone 4b.
 from __future__ import annotations
 
 import hashlib
+import html
 import json
+import os
 import pickle
 import re
+import tempfile
 import time
 import warnings
 from dataclasses import dataclass
+from functools import lru_cache
 from pathlib import Path
 from threading import Lock
 from typing import Any, Optional
@@ -783,50 +787,121 @@ def _format_enrichr_table(df: pd.DataFrame, top_terms: int) -> pd.DataFrame:
     return df.loc[:, keep].head(int(top_terms)).reset_index(drop=True)
 
 
-def run_enrichr_safe(gene_list: list[str], gene_set_library: str, organism: str, top_terms: int = 12) -> pd.DataFrame:
-    """Robust Enrichr call with multi-organism alias retry. Returns either a
-    formatted result table or a one-row DataFrame describing the failure."""
-    import gseapy as gp
+@lru_cache(maxsize=6)
+def _enrichr_libraries(base_url: str) -> frozenset[str]:
+    import requests
+    response = requests.get(f"{base_url}/datasetStatistics", timeout=(10, 30))
+    response.raise_for_status()
+    libraries = frozenset(x["libraryName"] for x in response.json()["statistics"])
+    if not libraries:
+        raise ValueError("Enrichr returned an empty library catalogue")
+    return libraries
 
-    genes = [str(g).strip() for g in gene_list if str(g).strip()]
-    # de-dup keep order
-    seen, deduped = set(), []
-    for g in genes:
-        if g not in seen:
-            seen.add(g); deduped.append(g)
-    genes = deduped
-    if len(genes) < 3:
-        return _format_enrichr_table(pd.DataFrame(), top_terms)
 
-    info = _enrichment_lib_info(organism)
+def _enrichment_error(exc: Exception) -> str:
+    response = getattr(exc, "response", None)
+    if response is not None and response.status_code == 429:
+        return "Enrichr rate limit (HTTP 429). Wait a few minutes, then click Compute DEG + GO/KEGG again."
+    if response is not None:
+        return f"Enrichr request failed (HTTP {response.status_code}). Please retry later."
+    return "Enrichr is unavailable or returned an invalid response. Check the server's internet connection and retry."
+
+
+def _fetch_enrichment(gene_list: list[str], kinds: list[str], species: str, top_terms: int, library_candidates: Optional[dict] = None) -> tuple[dict, dict]:
+    """Submit once for both libraries; never treat network errors as terms.
+
+    Use the same Enrichr libraries, server-side statistics and gene selection as
+    before. Do not change libraries or organism in response to a network error.
+    """
+    import requests
+    info = _enrichment_lib_info(species)
+    genes = list(dict.fromkeys(str(g).strip() for g in gene_list if str(g).strip()))
     if info["species_key"] == "mouse":
-        genes = [g.upper() for g in genes]
+        genes = list(dict.fromkeys(g.upper() for g in genes))
+    records, status = {kind: [] for kind in kinds}, {}
+    if len(genes) < 3:
+        return records, {kind: {"state": "insufficient_genes", "message": "Fewer than 3 selected genes; enrichment was not run."} for kind in kinds}
 
-    if str(gene_set_library).startswith("KEGG"):
-        candidates = list(dict.fromkeys([gene_set_library] + info["kegg_candidates"]))
-    elif str(gene_set_library).startswith("GO_Biological_Process"):
-        candidates = list(dict.fromkeys([gene_set_library] + info["go_bp_candidates"]))
-    else:
-        candidates = [gene_set_library]
+    instance = {"human": "Enrichr", "mouse": "Enrichr", "yeast": "YeastEnrichr",
+                "worm": "WormEnrichr", "fish": "FishEnrichr", "fly": "FlyEnrichr"}[info["species_key"]]
+    base_url = f"https://maayanlab.cloud/{instance}"
+    selected = {}
+    try:
+        available = _enrichr_libraries(base_url)
+        for kind in kinds:
+            candidates = (library_candidates or {}).get(kind, info["go_bp_candidates" if kind == "go" else "kegg_candidates"])
+            library = next((lib for lib in candidates if lib in available), None)
+            if library is None:
+                status[kind] = {"state": "error", "message": f"No configured {kind.upper()} library is available for {info['species_key']} in Enrichr."}
+            else:
+                selected[kind] = library
+        if not selected:
+            return records, status
+        with requests.Session() as session:
+            response = session.post(f"{base_url}/addList", files={
+                "list": (None, "\n".join(genes)), "description": (None, "SpiderNet enrichment"),
+            }, timeout=(10, 30))
+            response.raise_for_status()
+            list_id = response.json()["userListId"]
+            for kind, library in selected.items():
+                response = session.get(f"{base_url}/enrich", params={
+                    "userListId": list_id, "backgroundType": library,
+                }, timeout=(10, 30))
+                response.raise_for_status()
+                rows = response.json()[library]
+                df = pd.DataFrame(rows, columns=["Rank", "Term", "P-value", "Odds Ratio", "Combined Score",
+                                                "Genes", "Adjusted P-value", "Old P-value", "Old adjusted P-value"])
+                df["Genes"] = df["Genes"].apply(lambda genes: ";".join(genes))
+                records[kind] = _format_enrichr_table(df, top_terms).to_dict("records")
+                status[kind] = {"state": "ok" if records[kind] else "empty", "library": library}
+    except (requests.RequestException, ValueError, KeyError, TypeError) as exc:
+        # Stop on a service failure, especially 429: further calls make it worse.
+        for kind in kinds:
+            if kind not in status:
+                status[kind] = {"state": "error", "message": _enrichment_error(exc)}
+    return records, status
 
-    last_err = None
-    for org in [info["organism"], info["species_key"]]:
-        for lib in candidates:
-            try:
-                enr = gp.enrichr(gene_list=genes, gene_sets=lib, organism=org, outdir=None, cutoff=1.0)
-                if enr is not None and getattr(enr, "results", None) is not None:
-                    df = _format_enrichr_table(enr.results, top_terms=top_terms)
-                    if df.shape[0] > 0:
-                        return df
-            except Exception as e:
-                last_err = e
 
-    err_text = str(last_err) if last_err else "no enrichment"
-    err_text = err_text.replace("\n", " ")[:200]
-    return pd.DataFrame({
-        "Term": [f"Enrichment failed ({info['species_key']}): {err_text}"],
-        "Adjusted P-value": [1.0], "Genes": [""], "Gene count": [0],
-    })
+def _legacy_enrichment_error(records: list[dict]) -> bool:
+    return any(str(row.get("Term", "")).startswith("Enrichment failed") for row in records)
+
+
+def _save_deg_cache(path: Path, data: dict) -> None:
+    # Readers must never see a partially written pickle.
+    temp_path = None
+    try:
+        with tempfile.NamedTemporaryFile(dir=path.parent, suffix=".tmp", delete=False) as f:
+            temp_path = Path(f.name)
+            pickle.dump(data, f)
+        os.replace(temp_path, path)
+    finally:
+        if temp_path is not None:
+            temp_path.unlink(missing_ok=True)
+
+
+def _ensure_selected_enrichment(deg: dict, cluster: str, direction: str, species: str,
+                                max_genes: int, top_terms: int) -> tuple[dict, dict, bool]:
+    """Repair only missing/failed selected results, retaining DEG and successes."""
+    enr = deg.setdefault("enrichment", {}).setdefault(cluster, {}).setdefault(direction, {})
+    status = deg.setdefault("enrichment_status", {}).setdefault(cluster, {}).setdefault(direction, {})
+    genes = [row["gene"] for row in deg["marker_tables"][cluster].get(direction, [])][:int(max_genes)]
+    signature = _hash_params({"genes": genes, "species": species, "top_terms": top_terms})
+    old_params = deg.get("params", {})
+    legacy_matches = (old_params.get("max_genes_for_enrichment") == max_genes
+                      and old_params.get("top_enrich_terms") == top_terms)
+    pending = []
+    for kind in ("go", "kegg"):
+        meta = status.get(kind, {})
+        reusable = (meta.get("signature") == signature if meta else legacy_matches)
+        if (kind not in enr or _legacy_enrichment_error(enr[kind])
+                or meta.get("state") == "error" or not reusable):
+            pending.append(kind)
+    if pending:
+        fresh, details = _fetch_enrichment(genes, pending, species, top_terms)
+        for kind in pending:
+            enr[kind] = fresh[kind]
+            status[kind] = dict(details[kind], signature=signature)
+    return enr, status, bool(pending)
 
 
 # ----------------------------------------------------------------------------
@@ -847,7 +922,7 @@ def compute_deg_for_run(
     max_genes_for_enrichment: int = 100,
     top_enrich_terms: int = 12,
 ) -> dict:
-    """Wilcoxon DEG per cluster vs. rest, plus Enrichr GO_BP + KEGG."""
+    """Wilcoxon DEG per cluster vs. rest; enrichment is fetched on selection."""
     import scanpy as sc
     sc.settings.verbosity = 0
     warnings.filterwarnings("ignore")
@@ -886,16 +961,14 @@ def compute_deg_for_run(
     }
 
     if len(pd.unique(expr.obs["subcluster"].astype(str))) < 2:
-        with open(cache_path, "wb") as f:
-            pickle.dump(out, f)
+        _save_deg_cache(cache_path, out)
         return out
 
     sc.tl.rank_genes_groups(expr, groupby="subcluster", method="wilcoxon",
                              use_raw=False, pts=False)
 
     species = ds.config.get("SPECIES", "human")
-    info = _enrichment_lib_info(species)
-    print(f"[m2] DEG/Enrichr: {expr.n_obs} cells × {expr.n_vars} genes, {len(result.cluster_order)} clusters, species={species}")
+    print(f"[m2] DEG: {expr.n_obs} cells × {expr.n_vars} genes, {len(result.cluster_order)} clusters, species={species}")
 
     for cluster in result.cluster_order:
         df = sc.get.rank_genes_groups_df(expr, group=cluster).copy()
@@ -918,34 +991,19 @@ def compute_deg_for_run(
         df_down = df[(df["logfoldchange"] <= -float(lfc_thresh)) & (df["padj"] <= float(padj_thresh))]
         df_down = df_down.sort_values(["padj", "logfoldchange"], ascending=[True, True]).head(200).reset_index(drop=True)
 
-        up_genes = df_up["gene"].tolist()[:int(max_genes_for_enrichment)]
-        down_genes = df_down["gene"].tolist()[:int(max_genes_for_enrichment)]
-
-        enr = {"up": {}, "down": {}}
-        for direction, genes in (("up", up_genes), ("down", down_genes)):
-            enr[direction]["go"] = run_enrichr_safe(
-                genes, gene_set_library=info["go_bp"], organism=info["organism"],
-                top_terms=top_enrich_terms,
-            ).to_dict("records")
-            enr[direction]["kegg"] = run_enrichr_safe(
-                genes, gene_set_library=info["kegg"], organism=info["organism"],
-                top_terms=top_enrich_terms,
-            ).to_dict("records")
-
         out["deg_full"][str(cluster)] = df.to_dict("records")
         out["marker_tables"][str(cluster)] = {
             "up": df_up.to_dict("records"),
             "down": df_down.to_dict("records"),
         }
-        out["enrichment"][str(cluster)] = enr
+        out["enrichment"][str(cluster)] = {"up": {}, "down": {}}
         out["deg_overview"].append({
             "cluster": str(cluster),
             "n_up": int(df_up.shape[0]),
             "n_down": int(df_down.shape[0]),
         })
 
-    with open(cache_path, "wb") as f:
-        pickle.dump(out, f)
+    _save_deg_cache(cache_path, out)
     return out
 
 
@@ -1011,12 +1069,18 @@ def build_volcano_figure(deg_records: list[dict], cluster: str, lfc_thresh: floa
     return _to_plotly_json(fig)
 
 
-def build_enrichment_bubble(records: list[dict], title: str, theme_mode: str = "dark") -> dict:
+def build_enrichment_bubble(records: list[dict], title: str, theme_mode: str = "dark",
+                            status: Optional[dict] = None) -> dict:
     theme = _theme_spec(theme_mode)
-    if not records:
+    status = status or {}
+    if not records or status.get("state") == "error" or _legacy_enrichment_error(records):
+        message = status.get("message", "No terms returned for the selected genes.")
+        if _legacy_enrichment_error(records):
+            message = "Previous enrichment request failed. Click Compute DEG + GO/KEGG to retry."
+        import textwrap
         fig = go.Figure()
         fig.add_annotation(x=0.5, y=0.5, xref="paper", yref="paper",
-                           text="No terms.", showarrow=False,
+                           text="<br>".join(html.escape(line) for line in textwrap.wrap(message, width=65)), showarrow=False,
                            font=dict(color=theme["text"]))
         fig.update_layout(paper_bgcolor=theme["bg"], plot_bgcolor=theme["bg"],
                           title=dict(text=title, font=dict(color=theme["text"], size=12)),
@@ -1093,7 +1157,12 @@ def build_deg_response(
 
     full_records = deg["deg_full"][cluster_str]
     marker_records = deg["marker_tables"][cluster_str].get(direction_str, [])
-    enr = deg["enrichment"][cluster_str].get(direction_str, {"go": [], "kegg": []})
+    enr, enrichment_status, changed = _ensure_selected_enrichment(
+        deg, cluster_str, direction_str, ds.config.get("SPECIES", "human"),
+        max_genes_for_enrichment, top_enrich_terms,
+    )
+    if changed:
+        _save_deg_cache(_deg_cache_path(ds, result.cache_key, lfc_thresh, padj_thresh), deg)
 
     return {
         "cluster": cluster_str,
@@ -1104,10 +1173,11 @@ def build_deg_response(
         "volcano_figure": build_volcano_figure(full_records, cluster_str, lfc_thresh, padj_thresh, theme_mode),
         "go_figure": build_enrichment_bubble(enr.get("go", []),
                                               f"GO_BP · cluster {cluster_str} ({direction_str})",
-                                              theme_mode),
+                                              theme_mode, enrichment_status.get("go")),
         "kegg_figure": build_enrichment_bubble(enr.get("kegg", []),
                                                 f"KEGG · cluster {cluster_str} ({direction_str})",
-                                                theme_mode),
+                                                theme_mode, enrichment_status.get("kegg")),
+        "enrichment_status": enrichment_status,
         "marker_table": marker_records[:50],
         "go_table": enr.get("go", [])[:25],
         "kegg_table": enr.get("kegg", [])[:25],

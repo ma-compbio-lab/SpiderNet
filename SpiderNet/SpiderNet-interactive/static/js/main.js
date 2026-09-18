@@ -1,3 +1,63 @@
+// Presentation-only helpers: theme changes never submit an analysis request.
+(function () {
+  "use strict";
+  function theme() {
+    const light = document.documentElement.getAttribute("data-theme") === "light";
+    return { bg: light ? "#ffffff" : "#000000", fg: light ? "#111111" : "#ffffff",
+      muted: light ? "#4b5563" : "#d1d5db", rgb: light ? "17,17,17" : "255,255,255" };
+  }
+  function tint(value, key, colors) {
+    if (Array.isArray(value)) {
+      // Preserve scientific data, category palettes, labels and color scales.
+      if (["x", "y", "z", "customdata", "hovertext", "text", "ticktext", "tickvals", "ids", "color", "colorscale"].includes(key)) return value;
+      return value.map(v => tint(v, key, colors));
+    }
+    if (value && typeof value === "object") {
+      if (ArrayBuffer.isView(value)) return value;
+      return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, tint(v, k, colors)]));
+    }
+    if (typeof value !== "string" || !/color$/.test(key)) return value;
+    const v = value.toLowerCase().replace(/\s/g, "");
+    const neutral = ["#ffffff", "#fff", "white", "#000000", "#000", "black", "#111111", "#111"].includes(v);
+    if (neutral) return key.includes("bgcolor") ? colors.bg : colors.fg;
+    if (["#4b5563", "#d1d5db", "#6b7280", "#9ca3af"].includes(v)) return colors.muted;
+    const rgba = v.match(/^rgba\((?:255,255,255|17,17,17|0,0,0),([\d.]+)\)$/);
+    if (rgba && Number(rgba[1]) > 0) return `rgba(${colors.rgb},${rgba[1]})`;
+    return value;
+  }
+  window.spnRenderPlot = function (target, data, layout, options) {
+    const colors = theme();
+    const styled = tint(layout || {}, "layout", colors);
+    styled.paper_bgcolor = colors.bg;
+    styled.plot_bgcolor = colors.bg;
+    styled.font = Object.assign({}, styled.font, {color: colors.fg});
+    return Plotly.react(target, tint(data || [], "data", colors), styled, options);
+  };
+  window.addEventListener("spn:themechange", function () {
+    if (!window.Plotly) return;
+    document.querySelectorAll(".js-plotly-plot").forEach(el => {
+      window.spnRenderPlot(el, el.data, el.layout, el._context);
+    });
+  });
+  window.spnValidateInputs = function (ids, status) {
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      const n = Number(el.value);
+      if (!el.value.trim() || !Number.isFinite(n) ||
+          (el.min !== "" && n < Number(el.min)) || (el.max !== "" && n > Number(el.max)) ||
+          (el.step === "1" && !Number.isInteger(n))) {
+        const label = el.labels && el.labels[0] ? el.labels[0].textContent.trim() : id;
+        status.textContent = `Invalid ${label}: enter a number${el.min !== "" ? ` >= ${el.min}` : ""}${el.max !== "" ? ` and <= ${el.max}` : ""}.`;
+        el.focus();
+        return false;
+      }
+    }
+    return true;
+  };
+})();
+
+// END SHARED UI HELPERS
+
 /**
  * SpiderNet Results Viewer - Main JavaScript
  */
@@ -101,12 +161,14 @@ function initKeyboardNav() {
         const isModalOpen = modal && modal.classList.contains('show');
 
         // Ignore if user is typing in an input
-        if ($(e.target).is('input, textarea')) {
+        if ($(e.target).is('input, textarea, select, [contenteditable]')) {
             if (e.key === 'Escape') {
                 e.target.blur();
             }
             return;
         }
+
+        if (e.ctrlKey || e.metaKey || e.altKey) return;
 
         // Global shortcuts (work everywhere)
         if (e.key === '?' && !isModalOpen) {
@@ -116,9 +178,9 @@ function initKeyboardNav() {
         }
 
         if ((e.key === '/' || e.key.toLowerCase() === 's') && !isModalOpen) {
-            e.preventDefault();
             const searchBox = document.getElementById('plotSearch');
             if (searchBox) {
+                e.preventDefault();
                 searchBox.focus();
             }
             return;
@@ -482,10 +544,6 @@ function showKeyboardHelp() {
                     <tr>
                         <td><kbd>Esc</kbd></td>
                         <td>Close modal or dialog</td>
-                    </tr>
-                    <tr>
-                        <td><kbd>← →</kbd></td>
-                        <td>Navigate between plots (in modal)</td>
                     </tr>
                     <tr>
                         <td><kbd>/</kbd> or <kbd>S</kbd></td>
