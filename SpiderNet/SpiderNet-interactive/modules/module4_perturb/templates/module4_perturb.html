@@ -18,6 +18,7 @@
   .m4-feature-table tbody tr { cursor: pointer; }
   .m4-feature-table tbody tr.selected { background: var(--accent-tint); }
   .m4-feature-table-wrap { max-height: 280px; overflow-y: auto; }
+  .m4-feature-table-wrap thead th, .m4-de-table-wrap thead th { position: sticky; top: 0; background: var(--bg); z-index: 1; }
   .m4-de-table-wrap { max-height: 540px; overflow-y: auto; }
 
   .m4-spinner-overlay {
@@ -33,11 +34,35 @@
   .m4-mode-knockout .m4-replacement-only,
   .m4-mode-replacement .m4-knockout-only { display: none; }
 
-  .m4-multiselect { min-height: 6rem; }
+  .m4-multiselect {
+    min-height: 6rem; max-height: 10rem; overflow-y: auto;
+    padding: .25rem; border: 1px solid var(--border);
+    border-radius: var(--radius-sm); background: var(--bg); color: var(--fg);
+  }
+  .m4-controls .m4-celltype-option {
+    display: flex; align-items: center; gap: .5rem;
+    padding: .25rem .35rem; margin: 0; cursor: pointer; overflow-wrap: anywhere;
+  }
+  .m4-celltype-option .form-check-input { flex-shrink: 0; margin: 0; }
+  .m4-celltype-option:focus-within { outline: 2px solid var(--accent); outline-offset: -2px; }
 </style>
 {% endblock %}
 
 {% block content %}
+{% macro celltype_picker(id, title, empty_label) %}
+<div class="mb-2">
+  <div class="d-flex align-items-center justify-content-between gap-1 mb-1">
+    <span id="{{ id }}-label" class="small fw-medium">{{ title }}</span>
+    <div class="d-flex gap-1">
+      <button id="{{ id }}-all" type="button" class="btn btn-outline-secondary btn-sm py-0" aria-label="Select all {{ title }}">All</button>
+      <button id="{{ id }}-clear" type="button" class="btn btn-outline-secondary btn-sm py-0" aria-label="Clear {{ title }}">Clear</button>
+    </div>
+  </div>
+  <div id="{{ id }}" class="m4-multiselect small" role="group" aria-labelledby="{{ id }}-label"
+       aria-describedby="{{ id }}-summary" data-empty-label="{{ empty_label }}"></div>
+  <div id="{{ id }}-summary" class="text-muted small mt-1" aria-live="polite">{{ empty_label }}</div>
+</div>
+{% endmacro %}
 <div class="container-fluid px-4">
   <nav aria-label="breadcrumb">
     <ol class="breadcrumb">
@@ -87,31 +112,25 @@
               <input type="number" id="m4-keep-pct" class="form-control form-control-sm mb-2"
                      value="50" min="0" max="100" step="5">
 
-              <label class="small">Sender cell types</label>
-              <select id="m4-sender-types" class="form-select form-select-sm m4-multiselect mb-2" multiple></select>
-
-              <label class="small">Receiver cell types</label>
-              <select id="m4-receiver-types" class="form-select form-select-sm m4-multiselect mb-2" multiple></select>
+              {{ celltype_picker('m4-sender-types', 'Sender cell types', 'All types (no filter)') }}
+              {{ celltype_picker('m4-receiver-types', 'Receiver cell types', 'All types (no filter)') }}
               <p class="text-muted small mb-2">
-                Empty = all sender / receiver cell types. Hold ⌘ / Ctrl to multi-select.
+                Click to select multiple types independently in each group. Empty = all sender / receiver cell types.
               </p>
             </div>
 
             <!-- Replacement-only -->
             <div class="m4-replacement-only">
-              <label class="small">Replacement cell type(s)</label>
-              <select id="m4-replacement-types" class="form-select form-select-sm m4-multiselect mb-2" multiple></select>
-
-              <label class="small">Cell types to be replaced</label>
-              <select id="m4-replaced-types" class="form-select form-select-sm m4-multiselect mb-2" multiple></select>
+              {{ celltype_picker('m4-replacement-types', 'Replacement cell type(s)', 'Select at least one type') }}
+              {{ celltype_picker('m4-replaced-types', 'Cell types to be replaced', 'Select at least one type') }}
+              <p class="text-muted small mb-2">Click to select multiple types. Replacement and replaced types must not overlap.</p>
 
               <label for="m4-seed" class="small">Random seed</label>
               <input type="number" id="m4-seed" class="form-control form-control-sm mb-2" value="0" step="1">
             </div>
 
             <hr>
-            <label class="small">Comparison cell type(s)</label>
-            <select id="m4-target-types" class="form-select form-select-sm m4-multiselect mb-2" multiple></select>
+            {{ celltype_picker('m4-target-types', 'Comparison cell type(s)', 'Select at least one type') }}
             <p class="text-muted small mb-2">
               <span class="m4-knockout-only">Cell types whose predicted expression we compare before vs. after knockout.</span>
               <span class="m4-replacement-only">Neighboring cell types of replaced cells, used for the comparison.</span>
@@ -150,7 +169,9 @@
             <button id="m4-run" class="btn btn-primary btn-sm w-100" disabled>
               <i class="fas fa-play me-1"></i>Run perturbation
             </button>
-            <p class="text-muted small mt-2 mb-0" id="m4-run-hint">
+            <progress id="m4-prepare-progress" class="w-100 mt-2" aria-label="Model preparation in progress" hidden></progress>
+            <button id="m4-prepare-retry" type="button" class="btn btn-outline-primary btn-sm mt-2" hidden>Retry model preparation</button>
+            <p class="text-muted small mt-2 mb-0" id="m4-run-hint" role="status" aria-live="polite">
               Loading model & baseline cache before first run…
             </p>
           </div>
@@ -272,6 +293,9 @@
                 <div class="card">
                   <div class="card-body">
                     <h2 class="h6 mb-2"><i class="fas fa-circle-nodes me-1"></i>GO Biological Process</h2>
+                    <p class="text-muted small mb-2">The DE table includes both directions. Enrichment also applies the selected direction and scope; at least 3 genes are required.</p>
+                    <p id="m4-enrichment-status" class="small" role="status" aria-live="polite"></p>
+                    <button id="m4-enrichment-retry" class="btn btn-outline-secondary btn-sm mb-2" hidden>Retry enrichment</button>
                     <div id="m4-go"></div>
                   </div>
                 </div>

@@ -180,8 +180,10 @@
           </div>
           <p class="small text-muted">
             First call builds an expression cache for the cell type
-            (size-dependent — minutes on Malignant). Subsequent threshold or
-            cluster changes are fast.
+            (size-dependent — minutes on Malignant). GO/KEGG queries Enrichr online
+            for the selected cluster and direction, then caches successful results.
+            If Enrichr is unavailable or rate-limited, wait and click Compute again;
+            cached differential expression results are reused.
           </p>
           <div id="m2-deg-status" class="small text-muted mb-2"></div>
 

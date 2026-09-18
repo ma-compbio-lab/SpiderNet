@@ -98,6 +98,13 @@ def api_prepare(dataset_name: str):
     })
 
 
+@bp.route("/api/prepare-progress", methods=["GET"])
+def api_prepare_progress(dataset_name: str):
+    response = jsonify(service.get_prepare_progress(_resolve(dataset_name)))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 @bp.route("/api/run", methods=["POST"])
 def api_run(dataset_name: str):
     ds = _resolve(dataset_name)

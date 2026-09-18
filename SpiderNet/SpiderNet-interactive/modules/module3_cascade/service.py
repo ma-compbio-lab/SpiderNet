@@ -9,6 +9,8 @@ module by later milestones.
 from __future__ import annotations
 
 import hashlib
+import html
+import textwrap
 import json
 import pickle
 import time
@@ -541,7 +543,7 @@ def build_heatmap_figure(payload: dict[str, Any], theme_mode: str = "dark") -> d
     return _to_plotly_json(fig)
 
 
-def build_pair_stem_figure(payload: dict[str, Any], pair_key: str, theme_mode: str = "dark") -> dict:
+def build_pair_stem_figure(payload: dict[str, Any], pair_key: str, theme_mode: str = "dark", top_n: int = STEM_TOPN) -> dict:
     """For one significant pair, plot top-N celltype-triple proportions as a stem plot."""
     theme = _theme_spec(theme_mode)
     pair_payload = payload.get("pair_payload", {})
@@ -560,7 +562,7 @@ def build_pair_stem_figure(payload: dict[str, Any], pair_key: str, theme_mode: s
     proportions = list(triple_data["proportions"])
     pairs = [(t, p) for t, p in zip(triples, proportions) if p > STEM_PROP_MIN]
     pairs.sort(key=lambda x: -x[1])
-    pairs = pairs[:STEM_TOPN]
+    pairs = pairs[:max(1, min(100, int(top_n)))]
 
     if not pairs:
         fig = go.Figure()
@@ -643,10 +645,10 @@ def build_run_response(payload: dict[str, Any], theme_mode: str = "dark") -> dic
     }
 
 
-def build_stem_response(payload: dict[str, Any], pair_key: str, theme_mode: str = "dark") -> dict:
+def build_stem_response(payload: dict[str, Any], pair_key: str, theme_mode: str = "dark", top_n: int = STEM_TOPN) -> dict:
     return {
         "pair_key": pair_key,
-        "stem_figure": build_pair_stem_figure(payload, pair_key, theme_mode=theme_mode),
+        "stem_figure": build_pair_stem_figure(payload, pair_key, theme_mode=theme_mode, top_n=top_n),
     }
 
 
@@ -654,7 +656,7 @@ def build_stem_response(payload: dict[str, Any], pair_key: str, theme_mode: str 
 # Sub-milestone 5b: in-situ rendering + DEG/GO
 # ============================================================================
 
-import matplotlib.cm as _cm
+from matplotlib import colormaps as _colormaps
 import matplotlib.colors as _mcolors
 from scipy import stats as _stats
 
@@ -788,7 +790,7 @@ def _get_global_palette(ds: DatasetPaths) -> dict[str, str]:
             if s not in seen_set:
                 seen.append(s); seen_set.add(s)
     n = max(len(seen), 1)
-    cmap = _cm.get_cmap("tab20", n)
+    cmap = _colormaps["tab20"].resampled(n)
     colors = [_mcolors.to_hex(cmap(i)) for i in range(n)]
     palette = {ct: colors[i % len(colors)] for i, ct in enumerate(seen)}
     with _5B_LOCK:
@@ -1363,42 +1365,14 @@ def _run_deg(ds: DatasetPaths, interest_df: pd.DataFrame, baseline_df: pd.DataFr
 
 
 def _run_go(genes: list[str], organism: str, gene_sets: tuple = DEFAULT_GO_GENESETS, top_n: int = DEFAULT_GO_TOPN) -> dict[str, Any]:
-    uniq = list(dict.fromkeys([str(g) for g in genes if str(g)]))
-    if len(uniq) < 3:
-        return {"ok": False, "message": "≥3 genes required", "df": pd.DataFrame()}
-
-    try:
-        import gseapy as gp
-    except Exception as e:
-        return {"ok": False, "message": f"gseapy import failed: {e}", "df": pd.DataFrame()}
-
-    org_canon = "human" if str(organism).lower().startswith("human") else (
-        "mouse" if str(organism).lower().startswith("mouse") else "human"
-    )
-    candidates = [org_canon] + (["human"] if org_canon != "human" else []) + (["mouse"] if org_canon != "mouse" else [])
-    last_err = None
-    for cand in dict.fromkeys(candidates):
-        for attempt in range(3):
-            try:
-                enr = gp.enrichr(gene_list=uniq, gene_sets=list(gene_sets), organism=cand,
-                                 outdir=None, no_plot=True, cutoff=1.0)
-                res = getattr(enr, "results", None)
-                if res is None or len(res) == 0:
-                    last_err = f"no terms ({cand})"
-                    break
-                df = pd.DataFrame(res).copy()
-                if "Adjusted P-value" in df.columns:
-                    df = df.sort_values("Adjusted P-value")
-                keep = [c for c in ["Gene_set", "Term", "Adjusted P-value", "P-value", "Combined Score", "Overlap", "Genes"] if c in df.columns]
-                df = df[keep].head(int(top_n)).reset_index(drop=True)
-                return {"ok": True, "df": df, "message": f"top {df.shape[0]} terms ({cand})", "organism_used": cand}
-            except Exception as e:
-                last_err = str(e)
-                if "429" in last_err or "too many" in last_err.lower():
-                    if attempt < 2:
-                        time.sleep(0.75 * (2 ** attempt)); continue
-                break
-    return {"ok": False, "message": f"GO enrichment failed: {last_err}", "df": pd.DataFrame()}
+    from modules.module2_subtype.service import _fetch_enrichment
+    records, statuses = _fetch_enrichment(genes, ["go"], organism, top_n,
+                                          library_candidates={"go": list(gene_sets)})
+    status = statuses["go"]
+    message = status.get("message", "Enrichr returned no terms." if status["state"] == "empty" else f"Top {len(records['go'])} terms ({organism})")
+    message = message.replace("Compute DEG + GO/KEGG", "Compute DEG + GO")
+    return {"ok": status["state"] == "ok", "state": status["state"], "message": message,
+            "df": pd.DataFrame(records["go"]), "organism_used": organism, "library": status.get("library")}
 
 
 def _build_volcano(deg_df: pd.DataFrame, lfc_thresh: float, padj_thresh: float, title: str, theme: dict) -> dict:
@@ -1451,11 +1425,11 @@ def _build_volcano(deg_df: pd.DataFrame, lfc_thresh: float, padj_thresh: float, 
     return _to_plotly_json(fig)
 
 
-def _build_go_bubble(go_df: pd.DataFrame, title: str, theme: dict) -> dict:
+def _build_go_bubble(go_df: pd.DataFrame, title: str, theme: dict, message: str = "No enriched GO terms.") -> dict:
     if go_df is None or go_df.empty:
         fig = go.Figure()
         fig.add_annotation(x=0.5, y=0.5, xref="paper", yref="paper",
-                           text="No GO terms.", showarrow=False, font=dict(color=theme["text"]))
+                           text="<br>".join(html.escape(line) for line in textwrap.wrap(message, 55)), showarrow=False, font=dict(color=theme["text"]))
         fig.update_layout(paper_bgcolor=theme["bg"], plot_bgcolor=theme["bg"],
                           xaxis=dict(visible=False), yaxis=dict(visible=False),
                           height=320, title=dict(text=title, font=dict(color=theme["text"], size=12)))
@@ -1466,6 +1440,8 @@ def _build_go_bubble(go_df: pd.DataFrame, title: str, theme: dict) -> dict:
     df["neglog10"] = -np.log10(np.clip(df["padj"].to_numpy(dtype=float), 1e-300, 1.0))
     if "Overlap" in df.columns:
         df["count"] = df["Overlap"].astype(str).str.extract(r"^(\d+)").fillna(0).astype(int)
+    elif "Gene count" in df.columns:
+        df["count"] = df["Gene count"]
     else:
         df["count"] = 1
     df = df.iloc[::-1].reset_index(drop=True)
@@ -1531,8 +1507,15 @@ def run_cascade_deggo(
     }, sort_keys=True)
     cache_key = hashlib.md5(cache_token.encode("utf-8")).hexdigest()
     with _5B_LOCK:
-        if cache_key in _DEGGO_CACHE:
-            return _DEGGO_CACHE[cache_key]
+        cached = _DEGGO_CACHE.get(cache_key)
+    if cached is not None:
+        # Retry only failed GO requests; preserve the existing DEG calculations.
+        for position in cached["positions"].values():
+            if position.get("go_state") == "error":
+                result = _run_go(position["enrichment_genes"], organism=organism, top_n=top_n_terms)
+                position.update(go_state=result["state"], go_message=result["message"], go_library=result.get("library"))
+                position["go_figure"] = _build_go_bubble(result["df"], f"GO ({direction}) · {position['label']}", _theme_spec(theme_mode), message=result["message"])
+        return cached
 
     sig_df = pair_payload["sig_df_numeric"]
     row = sig_df.loc[sig_df["pair_key"] == pair_key]
@@ -1575,9 +1558,11 @@ def run_cascade_deggo(
                 title=f"Volcano · {position_label}", theme=theme,
             ),
             "go_figure": _build_go_bubble(
-                go_res["df"], title=f"GO ({direction}) · {position_label}", theme=theme,
+                go_res["df"], title=f"GO ({direction}) · {position_label}", theme=theme, message=go_res["message"],
             ),
             "go_message": go_res["message"],
+            "go_state": go_res["state"], "go_library": go_res.get("library"),
+            "enrichment_genes": chosen_genes,
             "top_genes": (deg["up_df"] if direction == "up" else deg["down_df"]).head(20).to_dict(orient="records"),
         }
 

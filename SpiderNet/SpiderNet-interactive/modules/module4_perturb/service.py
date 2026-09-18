@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import html
 import json
 import pickle
 import re
 import time
+import textwrap
 from collections import defaultdict
 from pathlib import Path
 from threading import Lock
@@ -47,7 +49,6 @@ DEFAULT_ENRICH_SCOPE = "indirect_only"
 DEFAULT_ENRICH_TOP_TERMS = 12
 DEFAULT_MAX_CELLS_FOR_DE = 8000
 DEFAULT_RANDOM_SEED = 0
-DEFAULT_HIDDEN_CHANNELS = 256
 
 CACHE_SCHEMA_VERSION = "v1_flask_m4"
 
@@ -71,9 +72,39 @@ def _runs_dir(ds: DatasetPaths) -> Path:
 # In-memory caches: keyed by dataset name
 _STATE_CACHE: dict[str, dict[str, Any]] = {}
 _STATE_LOCK = Lock()
+_STATE_BUILD_LOCK = Lock()
+_PREPARE_PROGRESS: dict[str, dict[str, Any]] = {}
+_PROGRESS_LOCK = Lock()  # Polling must not wait for the model-loading lock.
 _RUN_CACHE: dict[str, dict[str, Any]] = {}     # cache_key -> {de_df, summary}
 _RUN_LOCK = Lock()
-_ENRICH_CACHE: dict[tuple, pd.DataFrame] = {}  # (kind, species, genes_tuple, top_n) -> df
+_ENRICH_CACHE: dict[tuple, tuple[pd.DataFrame, dict]] = {}  # Successful responses only.
+
+
+def _prepare_progress(ds: DatasetPaths, message: str, *, state: str = "loading",
+                      completed: Optional[int] = None, total: Optional[int] = None,
+                      restart: bool = False) -> None:
+    now = time.monotonic()
+    with _PROGRESS_LOCK:
+        previous = _PREPARE_PROGRESS.get(ds.name, {})
+        started = now if restart else previous.get("started", now)
+        _PREPARE_PROGRESS[ds.name] = {
+            "state": state, "message": message, "started": started, "updated": now,
+            "completed": completed, "total": total,
+        }
+    print(f"[M4 {ds.name}] {now - started:.1f}s | {message}", flush=True)
+
+
+def get_prepare_progress(ds: DatasetPaths) -> dict[str, Any]:
+    now = time.monotonic()
+    with _PROGRESS_LOCK:
+        progress = dict(_PREPARE_PROGRESS.get(ds.name, {}))
+    if not progress:
+        return {"state": "idle", "message": "Waiting to start model preparation",
+                "elapsed_seconds": 0, "seconds_since_update": 0}
+    end = now if progress["state"] == "loading" else progress["updated"]
+    progress["elapsed_seconds"] = round(end - progress.pop("started"), 1)
+    progress["seconds_since_update"] = round(now - progress.pop("updated"), 1)
+    return progress
 
 
 # ============================================================================
@@ -425,13 +456,59 @@ def _extract_state_dict(ckpt_obj: Any) -> Optional[dict]:
     return None
 
 
-def _infer_predictions_for_slices(model: Any, data_list: Any, slice_indices: list[int], device: str) -> dict[int, np.ndarray]:
+def _checkpoint_hidden_channels(state_dict: dict, cfg_dict: dict) -> int:
+    """Recover the environmental encoder width from the trained weights.
+
+    The current model's pre-encoder has widths (2 * hidden, hidden). Older
+    training JSON files omit hidden_channels, so a fixed default is unsafe.
+    Other architectural dimensions and all keys are checked by strict loading.
+    """
+    key = "enc_factor_envir_pre_receiver.2.weight"
+    weight = state_dict.get(key)
+    if weight is None or getattr(weight, "ndim", None) != 2:
+        raise ValueError(f"Checkpoint is missing the encoder matrix {key!r}.")
+    hidden = int(weight.shape[0])
+    if hidden <= 0 or int(weight.shape[1]) != 2 * hidden:
+        raise ValueError(f"Unsupported checkpoint encoder shape: {tuple(weight.shape)}.")
+    configured = cfg_dict.get("hidden_channels", cfg_dict.get("HIDDEN_CHANNELS"))
+    if configured is not None and int(configured) != hidden:
+        raise ValueError(
+            f"Model configuration specifies hidden_channels={configured}, but the "
+            f"checkpoint requires {hidden}. Check that the configuration and checkpoint match."
+        )
+    return hidden
+
+
+def _load_trained_model(processed: Any, train_cfg: Any, cfg_dict: dict,
+                        checkpoint: Path, device: str) -> Any:
+    import torch
+    from SpiderNet.api import build_model
+
+    ckpt_obj = torch.load(checkpoint, map_location="cpu")
+    state_dict = _extract_state_dict(ckpt_obj)
+    if state_dict is None:
+        raise RuntimeError(f"Could not extract a state_dict from checkpoint: {checkpoint}")
+    hidden = _checkpoint_hidden_channels(state_dict, cfg_dict)
+    model = build_model(processed=processed, train_cfg=train_cfg,
+                        device="cpu", hidden_channels=hidden)
+    # Missing weights must never leave randomly initialized parameters in use.
+    model.load_state_dict(state_dict, strict=True)
+    return model.to(device).eval()
+
+
+def _infer_predictions_for_slices(model: Any, data_list: Any, slice_indices: list[int], device: str,
+                                   progress=None) -> dict[int, np.ndarray]:
     import torch
     pred = {}
     model.eval()
     with torch.inference_mode():
-        for idx in slice_indices:
+        for position, idx in enumerate(slice_indices):
             data_obj = data_list[idx]
+            started = time.monotonic()
+            if progress:
+                n_cells = int(_get_data_attr(data_obj, "x").shape[0])
+                progress(f"Predicting baseline: slice {position + 1}/{len(slice_indices)} ({n_cells:,} cells), device={device}",
+                         completed=position, total=len(slice_indices))
             data_for_model = data_obj.to(device) if hasattr(data_obj, "to") else data_obj
             outputs = model(data_for_model)
             if isinstance(outputs, (tuple, list)) and len(outputs) >= 1:
@@ -443,58 +520,51 @@ def _infer_predictions_for_slices(model: Any, data_list: Any, slice_indices: lis
             pred[idx] = _to_numpy(exp_recon).astype(np.float32)
             if device == "cuda":
                 torch.cuda.empty_cache()
+            if progress:
+                progress(f"Baseline slice {position + 1}/{len(slice_indices)} complete in {time.monotonic() - started:.1f}s",
+                         completed=position + 1, total=len(slice_indices))
     return pred
 
 
 def _build_state(ds: DatasetPaths, force_baseline_rebuild: bool = False) -> dict[str, Any]:
     """Heavy state: loads trained model, raw data list, baseline predictions."""
     try:
-        from SpiderNet.api import build_model
-        from SpiderNet.io import load_processed_data
+        from SpiderNet.io import ProcessedData
     except Exception as e:
         raise ImportError(
             f"SpiderNet package import failed ({e}). M4 needs SpiderNet.api.build_model "
-            "and SpiderNet.io.load_processed_data."
+            "and SpiderNet.io.ProcessedData."
         )
 
-    import torch
-
-    bundle = get_core_bundle(ds)
+    report = lambda message, **kwargs: _prepare_progress(ds, message, **kwargs)
+    report("Loading spatial data; waiting for any shared data load to finish")
+    bundle = get_core_bundle(ds, progress=report)
     raw_data_list = bundle["pyg_list"]
     adata_list = bundle["adata_list"]
     if adata_list is not None and len(adata_list) != len(raw_data_list):
         adata_list = None
 
-    processed = load_processed_data(ds.processed_dir)
+    report(f"Preparing model inputs for {len(raw_data_list)} slices (reusing loaded graphs)")
+    # build_model only needs these fields. Avoid reading multi-GB PyG and
+    # AnnData lists a second time through load_processed_data.
+    processed = ProcessedData(
+        spidernet_data=raw_data_list,
+        genenames_train=pd.read_pickle(ds.processed_dir / "genenames_train.pkl"),
+        lr_list=pd.read_pickle(ds.processed_dir / "LR_list.pkl"),
+    )
     cfg_dict = _load_training_cfg(ds)
     loading_bundle = _load_loading_bundle(ds)
     n_mi = len(loading_bundle["mi_list"])
     train_cfg = _make_training_config(cfg_dict, n_mi=n_mi, version=ds.version)
-    hidden_channels = int(cfg_dict.get(
-        "hidden_channels", cfg_dict.get("HIDDEN_CHANNELS", DEFAULT_HIDDEN_CHANNELS)
-    ))
-
     device = _select_device()
-
-    model = build_model(
-        processed=processed,
-        train_cfg=train_cfg,
-        device=device,
-        hidden_channels=hidden_channels,
-    )
-
     ckpt = _find_checkpoint(ds.model_dir)
     if ckpt is None:
         raise FileNotFoundError(
             f"Could not locate a model checkpoint under: {ds.model_dir}."
         )
-    ckpt_obj = torch.load(ckpt, map_location=device)
-    state_dict = _extract_state_dict(ckpt_obj)
-    if state_dict is None:
-        raise RuntimeError(f"Could not extract a state_dict from checkpoint: {ckpt}")
-    model.load_state_dict(state_dict, strict=False)
-    model = model.to(device)
-    model.eval()
+    report(f"Loading checkpoint {ckpt.name}, device={device}")
+    model = _load_trained_model(processed, train_cfg, cfg_dict, ckpt, device)
+    report(f"Model loaded: hidden_channels={model.hidden_channels}; indexing cell types")
 
     # Gene labels — prefer the processed bundle's training gene names.
     gene_labels = getattr(processed, "genenames_train", None)
@@ -514,8 +584,7 @@ def _build_state(ds: DatasetPaths, force_baseline_rebuild: bool = False) -> dict
     global_slice_ids: list = []
 
     for slice_idx, data_obj in enumerate(raw_data_list):
-        x = _to_numpy(_get_data_attr(data_obj, "x"))
-        n_cells = int(x.shape[0])
+        n_cells = int(_get_data_attr(data_obj, "x").shape[0])
 
         local_celltypes = _get_data_attr(data_obj, "cell_class", None)
         if local_celltypes is None and adata_list is not None:
@@ -554,15 +623,22 @@ def _build_state(ds: DatasetPaths, force_baseline_rebuild: bool = False) -> dict
     baseline_npz = _module_dir(ds) / "baseline_predictions.npz"
     baseline_meta = _module_dir(ds) / "baseline_predictions_meta.json"
     if baseline_npz.exists() and baseline_meta.exists() and not force_baseline_rebuild:
-        loaded = np.load(baseline_npz, allow_pickle=True)
-        baseline_pred_by_slice = {int(k.replace("slice_", "")): loaded[k] for k in loaded.files}
+        report("Loading saved baseline predictions (decompressing cache)")
+        with np.load(baseline_npz, allow_pickle=True) as loaded:
+            baseline_pred_by_slice = {}
+            for position, key in enumerate(loaded.files):
+                baseline_pred_by_slice[int(key.replace("slice_", ""))] = loaded[key]
+                report(f"Loaded baseline slice {position + 1}/{len(loaded.files)} from cache",
+                       completed=position + 1, total=len(loaded.files))
     else:
         baseline_pred_by_slice = _infer_predictions_for_slices(
             model=model,
             data_list=raw_data_list,
             slice_indices=list(range(len(raw_data_list))),
             device=device,
+            progress=report,
         )
+        report("Saving baseline predictions (compressing cache; this can take several minutes)")
         np.savez_compressed(
             baseline_npz,
             **{f"slice_{k}": v for k, v in baseline_pred_by_slice.items()},
@@ -604,12 +680,21 @@ def _build_state(ds: DatasetPaths, force_baseline_rebuild: bool = False) -> dict
 
 def get_state(ds: DatasetPaths, force_baseline_rebuild: bool = False) -> dict[str, Any]:
     """Return the cached M4 state for `ds`, building it on first call."""
-    with _STATE_LOCK:
-        cached = _STATE_CACHE.get(ds.name)
+    # Serialize preparation without holding the lock used by lightweight reads.
+    with _STATE_BUILD_LOCK:
+        with _STATE_LOCK:
+            cached = _STATE_CACHE.get(ds.name)
         if cached is not None and not force_baseline_rebuild:
             return cached
-        state = _build_state(ds, force_baseline_rebuild=force_baseline_rebuild)
-        _STATE_CACHE[ds.name] = state
+        _prepare_progress(ds, "Starting model and baseline preparation", restart=True)
+        try:
+            state = _build_state(ds, force_baseline_rebuild=force_baseline_rebuild)
+        except Exception as exc:
+            _prepare_progress(ds, f"Preparation failed: {type(exc).__name__}: {exc}", state="error")
+            raise
+        with _STATE_LOCK:
+            _STATE_CACHE[ds.name] = state
+        _prepare_progress(ds, f"Model and baseline ready: {len(state['slice_infos'])} slices, device={state['device']}", state="ready")
         return state
 
 
@@ -1124,112 +1209,46 @@ def run_replacement_analysis(ds: DatasetPaths, state: dict,
 
 
 # ============================================================================
-# Enrichment (Enrichr via gseapy)
+# Enrichment (shared Enrichr client)
 # ============================================================================
 
 def _empty_enrichment_df() -> pd.DataFrame:
     return pd.DataFrame(columns=["Term", "Adjusted P-value", "P-value", "Genes", "Gene count", "Combined Score"])
 
 
-def _format_enrichr_table(df: pd.DataFrame, top_terms: int = 12) -> pd.DataFrame:
-    if df is None or getattr(df, "shape", (0, 0))[0] == 0:
-        return _empty_enrichment_df()
-    df = df.copy()
-    if "Adjusted P-value" in df.columns:
-        df["Adjusted P-value"] = pd.to_numeric(df["Adjusted P-value"], errors="coerce")
-        df = df.sort_values("Adjusted P-value", ascending=True)
-    elif "P-value" in df.columns:
-        df["P-value"] = pd.to_numeric(df["P-value"], errors="coerce")
-        df = df.sort_values("P-value", ascending=True)
-    if "Gene count" not in df.columns:
-        if "Overlap" in df.columns:
-            df["Gene count"] = df["Overlap"].astype(str).str.extract(r"^(\d+)").fillna(0).astype(int)
-        elif "Genes" in df.columns:
-            df["Gene count"] = df["Genes"].astype(str).apply(
-                lambda x: len([g for g in re.split(r"[;,/]", x) if str(g).strip()])
-            )
-        else:
-            df["Gene count"] = 0
-    keep = [c for c in ("Term", "Adjusted P-value", "P-value", "Genes", "Gene count", "Combined Score") if c in df.columns]
-    return df.loc[:, keep].head(int(top_terms)).reset_index(drop=True)
+def cached_enrichment(gene_list: list[str], species: str, top_terms: int = 12) -> tuple[pd.DataFrame, pd.DataFrame, dict]:
+    # Reuse the validated Enrichr client used by Subtype. Both modules retain
+    # the same GO/KEGG library preferences and server-side statistics.
+    from modules.module2_subtype.service import _fetch_enrichment
 
-
-def _enrichr_libraries(species: str) -> dict:
+    genes = list(dict.fromkeys(str(g).strip() for g in gene_list if str(g).strip()))
     species_key = _normalize_species_key(species)
-    if species_key == "mouse":
-        organism_aliases = ["Mouse", "mouse", "mm", "mus musculus", "m. musculus"]
-        kegg_candidates = ["KEGG_2021_Mouse", "KEGG_2019_Mouse"]
-    else:
-        organism_aliases = ["Human", "human", "hs", "homo sapiens", "h. sapiens", "enrichr"]
-        kegg_candidates = ["KEGG_2021_Human", "KEGG_2019_Human"]
-    return {
-        "species_key": species_key,
-        "organism_aliases": organism_aliases,
-        "kegg_candidates": kegg_candidates,
-        "go_bp_candidates": ["GO_Biological_Process_2023", "GO_Biological_Process_2021", "GO_Biological_Process_2018"],
-    }
-
-
-def _run_enrichr_safe(gene_list: list[str], gene_set_kind: str, species: str, top_terms: int = 12) -> pd.DataFrame:
-    try:
-        import gseapy as gp
-    except Exception:
-        return _empty_enrichment_df()
-
-    genes = [str(g).strip() for g in gene_list if str(g).strip()]
-    seen: set = set()
-    deduped = []
-    for g in genes:
-        if g not in seen:
-            seen.add(g)
-            deduped.append(g)
-    if len(deduped) < 3:
-        return _empty_enrichment_df()
-
-    libs = _enrichr_libraries(species)
-    library_candidates = libs["kegg_candidates"] if gene_set_kind == "kegg" else libs["go_bp_candidates"]
-
-    for organism_name in libs["organism_aliases"]:
-        gene_input = [g.upper() for g in deduped] if str(organism_name).lower().startswith("mouse") else list(deduped)
-        try:
-            valid_libs = set(gp.get_library_name(organism=organism_name))
-        except Exception:
-            valid_libs = None
-        usable = [lib for lib in library_candidates if (valid_libs is None) or (lib in valid_libs)] or list(library_candidates)
-        for lib in usable:
-            try:
-                enr = gp.enrichr(
-                    gene_list=gene_input, gene_sets=lib,
-                    organism=organism_name, outdir=None, cutoff=1.0,
-                )
-                if enr is not None and getattr(enr, "results", None) is not None:
-                    out = _format_enrichr_table(enr.results.copy(), top_terms=top_terms)
-                    if out.shape[0] > 0:
-                        return out
-            except Exception:
-                continue
-    return _empty_enrichment_df()
-
-
-def cached_enrichment(gene_list: list[str], species: str, top_terms: int = 12) -> tuple[pd.DataFrame, pd.DataFrame]:
-    seen: set = set()
-    deduped = []
-    for g in gene_list:
-        s = str(g).strip()
-        if s and s not in seen:
-            seen.add(s)
-            deduped.append(s)
-    if len(deduped) < 3:
-        return _empty_enrichment_df(), _empty_enrichment_df()
-
-    libs = _enrichr_libraries(species)
-    key_go = ("go", libs["species_key"], tuple(deduped), int(top_terms))
-    key_kegg = ("kegg", libs["species_key"], tuple(deduped), int(top_terms))
-    if key_go not in _ENRICH_CACHE:
-        _ENRICH_CACHE[key_go] = _run_enrichr_safe(deduped, "go", species, top_terms)
-    if key_kegg not in _ENRICH_CACHE:
-        _ENRICH_CACHE[key_kegg] = _run_enrichr_safe(deduped, "kegg", species, top_terms)
-    return _ENRICH_CACHE[key_go].copy(), _ENRICH_CACHE[key_kegg].copy()
+    if len(genes) < 3:
+        status = {kind: {"state": "insufficient_genes", "message":
+                  f"Selected genes: {len(genes)}. At least 3 are required. Enrichment was not run."}
+                  for kind in ("go", "kegg")}
+        return _empty_enrichment_df(), _empty_enrichment_df(), status
+    keys = {kind: (kind, species_key, tuple(genes), int(top_terms)) for kind in ("go", "kegg")}
+    frames, statuses = {}, {}
+    missing = []
+    for kind, key in keys.items():
+        if key in _ENRICH_CACHE:
+            frames[kind], statuses[kind] = _ENRICH_CACHE[key]
+        else:
+            missing.append(kind)
+    if missing:
+        records, fetched_status = _fetch_enrichment(genes, missing, species_key, top_terms)
+        for kind in missing:
+            frames[kind] = pd.DataFrame(records[kind]) if records[kind] else _empty_enrichment_df()
+            statuses[kind] = dict(fetched_status[kind])
+            if "message" in statuses[kind]:
+                statuses[kind]["message"] = statuses[kind]["message"].replace(
+                    "click Compute DEG + GO/KEGG again", "click Retry enrichment")
+            # Failed requests must be retryable, while successful GO results
+            # remain cached if only KEGG fails (and vice versa).
+            if statuses[kind]["state"] in ("ok", "empty"):
+                _ENRICH_CACHE[keys[kind]] = (frames[kind].copy(), dict(statuses[kind]))
+    return frames["go"].copy(), frames["kegg"].copy(), {k: dict(v) for k, v in statuses.items()}
 
 
 # ============================================================================
@@ -1428,12 +1447,15 @@ def volcano_figure(df: pd.DataFrame, theme_mode: str = "dark",
 
 
 def bubble_figure(enrich_df: pd.DataFrame, theme_mode: str = "dark",
-                   title: Optional[str] = None, height: int = 320) -> dict:
+                   title: Optional[str] = None, height: int = 320, status: Optional[dict] = None) -> dict:
+    if status and status.get("state") in ("error", "insufficient_genes"):
+        message = "<br>".join(html.escape(line) for line in textwrap.wrap(status["message"], 58))
+        return _message_figure(message, theme_mode=theme_mode, height=height)
     if enrich_df is None or getattr(enrich_df, "shape", (0, 0))[0] == 0:
-        return _message_figure("No enriched terms.", theme_mode=theme_mode, height=height)
+        return _message_figure("Enrichr returned no terms for the selected genes.", theme_mode=theme_mode, height=height)
     df = pd.DataFrame(enrich_df).copy()
     if df.shape[0] == 0 or "Term" not in df.columns:
-        return _message_figure("No enriched terms.", theme_mode=theme_mode, height=height)
+        return _message_figure("Enrichr returned no terms for the selected genes.", theme_mode=theme_mode, height=height)
     spec = _theme_spec(theme_mode)
     if "Adjusted P-value" in df.columns:
         score = -np.log10(np.clip(pd.to_numeric(df["Adjusted P-value"], errors="coerce")
@@ -1552,7 +1574,16 @@ def build_run_response(ds: DatasetPaths, de_df: pd.DataFrame, summary: dict, cac
     enrich_genes = genes_for_enrichment(de_df, enrich_direction, enrich_scope, lfc_threshold, padj_threshold)
     state = _STATE_CACHE.get(ds.name)
     species = (state or {}).get("species") or ds.setup.get("SPECIES") or "human"
-    go_df, kegg_df = cached_enrichment(enrich_genes, species=species, top_terms=top_terms)
+    go_df, kegg_df, enrichment_status = cached_enrichment(enrich_genes, species=species, top_terms=top_terms)
+    counts = {direction: len(genes_for_enrichment(de_df, direction, enrich_scope, lfc_threshold, padj_threshold))
+              for direction in ("up", "down")}
+    direction_label = {"up": "upregulated", "down": "downregulated", "both": "up- and downregulated"}.get(enrich_direction, enrich_direction)
+    scope_label = "not directly perturbed" if enrich_scope == "indirect_only" else "all genes"
+    for status in enrichment_status.values():
+        status["n_genes"] = len(enrich_genes)
+        if status["state"] == "insufficient_genes":
+            status["message"] += (f" Direction: {direction_label}; scope: {scope_label}. "
+                                  f"Eligible at these thresholds and scope: {counts['up']} up, {counts['down']} down.")
 
     return {
         "cache_key": cache_key,
@@ -1560,11 +1591,14 @@ def build_run_response(ds: DatasetPaths, de_df: pd.DataFrame, summary: dict, cac
                      "lfc_threshold": float(lfc_threshold),
                      "padj_threshold": float(padj_threshold),
                      "n_enrichment_genes": len(enrich_genes),
+                     "enrich_direction": enrich_direction, "enrich_scope": enrich_scope,
+                     "enrichment_direction_counts": counts,
                      "n_display_genes": int(display_df.shape[0])},
         "de_records": _df_to_records(display_df),
         "volcano_figure": volcano_figure(de_df, theme_mode, lfc_threshold, padj_threshold),
-        "go_figure": bubble_figure(go_df, theme_mode, height=300),
-        "kegg_figure": bubble_figure(kegg_df, theme_mode, height=300),
+        "go_figure": bubble_figure(go_df, theme_mode, height=300, status=enrichment_status["go"]),
+        "kegg_figure": bubble_figure(kegg_df, theme_mode, height=300, status=enrichment_status["kegg"]),
+        "enrichment_status": enrichment_status,
         "go_records": _df_to_records(go_df),
         "kegg_records": _df_to_records(kegg_df),
     }

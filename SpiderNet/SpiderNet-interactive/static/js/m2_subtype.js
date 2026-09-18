@@ -73,7 +73,7 @@
   }
 
   function renderFig(el, fig, opts) {
-    Plotly.react(el, fig.data, Object.assign({ autosize: true }, fig.layout),
+    window.spnRenderPlot(el, fig.data, Object.assign({ autosize: true }, fig.layout),
       Object.assign({ responsive: true, displaylogo: false, displayModeBar: false }, opts || {}));
   }
 
@@ -96,6 +96,11 @@
   }
 
   async function runAnalysis() {
+    if (!window.spnValidateInputs(["m2-n-neighbors", "m2-n-pcs", "m2-louvain-res", "m2-umap-min-dist", "m2-random-state"], statusEl)) return;
+    if (!cellSel.value) { setStatus("Wait for cell types to load."); return; }
+    ++degVersion;
+    setDegSpinner(false);
+    degRunBtn.disabled = true;
     setSpinner(true);
     runBtn.disabled = true;
     setStatus("Running...");
@@ -129,6 +134,8 @@
       renderSummary(data.summary_table);
       // Populate DEG cluster dropdown.
       CURRENT_CACHE_KEY = data.cache_key;
+      [volcanoDiv, goDiv, keggDiv].forEach(el => Plotly.purge(el));
+      markerTableDiv.replaceChildren();
       degCluster.innerHTML = "";
       s.cluster_order.forEach((cid) => {
         const opt = document.createElement("option");
@@ -143,6 +150,7 @@
     } finally {
       setSpinner(false);
       runBtn.disabled = false;
+      degRunBtn.disabled = !CURRENT_CACHE_KEY;
     }
   }
 
@@ -172,7 +180,10 @@
       `<table class="table table-sm table-hover table-borderless mb-0"><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
   }
 
+  let degVersion = 0;
   async function runDeg() {
+    if (!window.spnValidateInputs(["m2-deg-lfc", "m2-deg-padj"], degStatus)) return;
+    const version = ++degVersion;
     if (!CURRENT_CACHE_KEY) {
       degStatus.textContent = "Run subtype discovery first.";
       return;
@@ -199,21 +210,25 @@
         throw new Error(err.error || `deg ${r.status}`);
       }
       const data = await r.json();
+      if (version !== degVersion) return;
       const dt = ((performance.now() - t0) / 1000).toFixed(1);
       const overview = data.deg_overview.find((o) => o.cluster === data.cluster);
       const counts = overview ? `up=${overview.n_up} · down=${overview.n_down}` : "";
       degStatus.textContent =
         `Cluster ${data.cluster} (${data.direction}) · ${data.expression_summary.n_cells.toLocaleString()} cells · ` +
         `${data.expression_summary.n_genes.toLocaleString()} genes · ${counts} · ${dt}s`;
+      const enrichmentErrors = Object.entries(data.enrichment_status || {})
+        .filter(([, status]) => status.state === "error")
+        .map(([kind, status]) => `${kind === "go" ? "GO_BP" : "KEGG"}: ${status.message}`);
+      if (enrichmentErrors.length) degStatus.textContent += ` · ${enrichmentErrors.join(" · ")}`;
       renderFig(volcanoDiv, data.volcano_figure);
       renderFig(goDiv, data.go_figure);
       renderFig(keggDiv, data.kegg_figure);
       renderMarkerTable(data.marker_table);
     } catch (err) {
-      degStatus.textContent = `Error: ${err.message}`;
+      if (version === degVersion) degStatus.textContent = `Error: ${err.message}`;
     } finally {
-      setDegSpinner(false);
-      degRunBtn.disabled = false;
+      if (version === degVersion) { setDegSpinner(false); degRunBtn.disabled = false; }
     }
   }
   degRunBtn.addEventListener("click", runDeg);
@@ -238,9 +253,10 @@
 
   // Cell-size: cheap UMAP-only re-render via /api/umap-restyle.
   // Only fires once a run has been executed (otherwise nothing to restyle).
-  let restyleTimer = null;
+  let restyleTimer = null, restyleVersion = 0;
   async function restyleUmap() {
     if (!CURRENT_CACHE_KEY) return;
+    const version = ++restyleVersion, key = CURRENT_CACHE_KEY;
     try {
       const r = await fetch(`${BASE}/api/umap-restyle`, {
         method: "POST",
@@ -253,7 +269,7 @@
       });
       const data = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(data.error || `umap-restyle ${r.status}`);
-      renderFig(umapDiv, data.umap_figure);
+      if (version === restyleVersion && key === CURRENT_CACHE_KEY) renderFig(umapDiv, data.umap_figure);
     } catch (err) {
       console.warn("UMAP restyle failed:", err);
     }
@@ -271,8 +287,5 @@
     restyleTimer = setTimeout(restyleUmap, 200);
   });
 
-  // Re-render server-themed Plotly figures when the user toggles theme.
-  window.addEventListener("spn:themechange", () => {
-    if (CURRENT_CACHE_KEY) runAnalysis();
-  });
+  // Theme changes restyle existing plots through the shared helpers in main.js.
 })();

@@ -66,8 +66,14 @@ def api_stem(dataset_name: str):
     cached = service.get_cached_analysis(cache_key)
     if cached is None:
         return jsonify({"error": "no cached cascade run for this cache_key (re-run /api/run)"}), 410
+    try:
+        top_n = int(payload.get("top_n", service.STEM_TOPN))
+        if not 1 <= top_n <= 100:
+            raise ValueError()
+    except (TypeError, ValueError):
+        return jsonify({"error": "top_n must be an integer from 1 to 100"}), 400
     return jsonify(service.build_stem_response(
-        cached, pair_key=str(pair_key),
+        cached, pair_key=str(pair_key), top_n=top_n,
         theme_mode=str(payload.get("theme", "dark")),
     ))
 

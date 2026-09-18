@@ -78,7 +78,7 @@
 
   function renderFig(el, fig, opts) {
     if (!fig) return;
-    Plotly.react(el, fig.data, Object.assign({ autosize: true }, fig.layout),
+    window.spnRenderPlot(el, fig.data, Object.assign({ autosize: true }, fig.layout),
       Object.assign({ responsive: true, displaylogo: false, displayModeBar: false }, opts || {}));
   }
 
@@ -134,6 +134,20 @@
 
   // -- /api/run -----------------------------------------------------------
   async function runAnalysis() {
+    if (!window.spnValidateInputs(["m3-mi-threshold", "m3-zscore-thr", "m3-padj-thr", "m3-nperm", "m3-fdr-alpha"], statusEl)) return;
+    ++pairVersion;
+    ++selectionVersion;
+    CURRENT_CACHE_KEY = null;
+    PAIR_OPTIONS = [];
+    populateMiUpstreamSelect();
+    renderPairTable([]);
+    Plotly.purge(heatmapDiv);
+    CURRENT_PAIR_KEY = null;
+    CURRENT_OPTIONS = null;
+    insituRunBtn.disabled = degRunBtn.disabled = true;
+    [stemDiv, insituDiv, ...[1, 2, 3].flatMap(i => [$( `m3-deg-pos${i}-volcano`), $(`m3-deg-pos${i}-go`)])].forEach(el => Plotly.purge(el));
+    [cell1Sel, cell2Sel, cell3Sel, sliceSel].forEach(el => el.replaceChildren());
+    insituStatus.textContent = degStatus.textContent = "Run analysis and select a cascade pair.";
     runBtn.disabled = true;
     setSpinner(true);
     setStatus("Running permutation test...");
@@ -172,7 +186,13 @@
   }
 
   // -- pair selection: refresh stem + in-situ options + MI dropdowns -----
+  let pairVersion = 0, stemVersion = 0, selectionVersion = 0;
   async function selectPair(pairKey) {
+    ++pairVersion;
+    ++selectionVersion;
+    [insituDiv, ...[1, 2, 3].flatMap(i => [$(`m3-deg-pos${i}-volcano`), $(`m3-deg-pos${i}-go`)])].forEach(el => Plotly.purge(el));
+    INSITU_RENDERED = DEGGO_RENDERED = false;
+    degStatus.textContent = "Selection changed. Click Compute DEG + GO to update.";
     CURRENT_PAIR_KEY = pairKey;
     syncMiDropdownsToPair(pairKey);
     await Promise.all([loadStem(pairKey), loadInsituOptions(pairKey)]);
@@ -181,21 +201,26 @@
 
   async function loadStem(pairKey) {
     if (!CURRENT_CACHE_KEY) return;
+    const version = ++stemVersion;
+    const key = CURRENT_CACHE_KEY;
     setStatus(`Loading triples for ${pairKey}...`);
     try {
       const data = await postJson("/api/stem", {
-        cache_key: CURRENT_CACHE_KEY, pair_key: pairKey, theme: currentTheme(),
+        cache_key: CURRENT_CACHE_KEY, pair_key: pairKey, theme: currentTheme(), top_n: Number(stemTopn.value),
       });
+      if (version !== stemVersion || pairKey !== CURRENT_PAIR_KEY || key !== CURRENT_CACHE_KEY) return;
       renderFig(stemDiv, data.stem_figure);
       setStatus(`${pairKey} loaded.`);
     } catch (err) {
-      setStatus(`Stem error: ${err.message}`);
+      if (version === stemVersion && pairKey === CURRENT_PAIR_KEY) setStatus(`Stem error: ${err.message}`);
     }
   }
 
   // -- /api/insitu-options + /api/insitu ----------------------------------
   async function loadInsituOptions(pairKey) {
     if (!CURRENT_CACHE_KEY) return;
+    const version = pairVersion;
+    [cell1Sel, cell2Sel, cell3Sel, sliceSel].forEach(el => { el.disabled = true; });
     insituStatus.textContent = `Loading in-situ options for ${pairKey}...`;
     insituRunBtn.disabled = true;
     degRunBtn.disabled = true;
@@ -203,16 +228,19 @@
       const data = await postJson("/api/insitu-options", {
         cache_key: CURRENT_CACHE_KEY, pair_key: pairKey,
       });
+      if (version !== pairVersion) return;
+      [cell1Sel, cell2Sel, cell3Sel, sliceSel].forEach(el => { el.disabled = false; });
       CURRENT_OPTIONS = data;
       fillSelect(cell1Sel, data.cell1_options.map((c) => ({ value: c, label: c })), data.default_cell1);
       fillSelect(cell2Sel, data.cell2_options.map((c) => ({ value: c, label: c })), data.default_cell2);
       fillSelect(cell3Sel, data.cell3_options.map((c) => ({ value: c, label: c })), data.default_cell3);
       updateSliceOptions();
       insituMiThr.value = data.base_threshold.toFixed(2);
+      $("m3-insitu-mi-thr-val").textContent = Number(insituMiThr.value).toFixed(2);
       insituStatus.textContent =
         `${data.n_summary_rows} celltype-triple/slice rows · ${data.total_cascade_count} total cascades at threshold ${data.base_threshold.toFixed(2)}`;
     } catch (err) {
-      insituStatus.textContent = `Error: ${err.message}`;
+      if (version === pairVersion) insituStatus.textContent = `Error: ${err.message}`;
     }
   }
 
@@ -398,6 +426,7 @@
   window.addEventListener("spn:themechange", refreshDegSchematics);
 
   async function runInsitu() {
+    const version = selectionVersion;
     if (!CURRENT_CACHE_KEY || !CURRENT_PAIR_KEY) {
       insituStatus.textContent = "Run cascade analysis first.";
       return;
@@ -422,6 +451,7 @@
         theme: currentTheme(),
       });
       const dt = ((performance.now() - t0) / 1000).toFixed(1);
+      if (version !== selectionVersion) return;
       renderFig(insituDiv, data.figure);
       const m = data.meta;
       insituStatus.textContent =
@@ -432,12 +462,14 @@
       insituStatus.textContent = `Error: ${err.message}`;
     } finally {
       setInsituSpinner(false);
-      insituRunBtn.disabled = false;
+      insituRunBtn.disabled = !sliceSel.value || sliceSel.disabled || !CURRENT_PAIR_KEY;
     }
   }
 
   // -- /api/deggo ---------------------------------------------------------
   async function runDegGo() {
+    const version = selectionVersion;
+    if (!window.spnValidateInputs(["m3-deg-lfc", "m3-deg-padj"], degStatus)) return;
     if (!CURRENT_CACHE_KEY || !CURRENT_PAIR_KEY) {
       degStatus.textContent = "Run analysis and pick a triple first.";
       return;
@@ -462,6 +494,7 @@
         theme: currentTheme(),
       });
       const dt = ((performance.now() - t0) / 1000).toFixed(1);
+      if (version !== selectionVersion) return;
       ["1", "2", "3"].forEach((pos) => {
         const p = data.positions[pos];
         if (!p) return;
@@ -475,14 +508,19 @@
       degStatus.textContent =
         `${data.gene_direction} genes · ${data.interest_triplets.toLocaleString()} interest triplets across ` +
         `${data.interest_slices} slices · ${summary} · ${dt}s`;
+      const errors = Object.values(data.positions).filter(p => p.go_state === "error").map(p => `${p.label}: ${p.go_message}`);
+      if (errors.length) degStatus.textContent += ` · ${errors.join(" · ")}`;
       DEGGO_RENDERED = true;
     } catch (err) {
       degStatus.textContent = `Error: ${err.message}`;
     } finally {
       setDegSpinner(false);
-      degRunBtn.disabled = false;
+      degRunBtn.disabled = !sliceSel.value || sliceSel.disabled || !CURRENT_PAIR_KEY;
     }
   }
+
+  [cell1Sel, cell2Sel, cell3Sel, sliceSel, insituMiThr, degBaselineUp, degBaselineDown,
+    degLfc, degPadj, degDirection].forEach(el => el.addEventListener("change", () => { ++selectionVersion; }));
 
   // -- bindings -----------------------------------------------------------
   runBtn.addEventListener("click", runAnalysis);
@@ -492,11 +530,5 @@
     if (CURRENT_PAIR_KEY) loadStem(CURRENT_PAIR_KEY);
   });
 
-  // Re-render server-themed Plotly figures when the user toggles theme.
-  // Each panel is re-fetched only if the user has already rendered it.
-  window.addEventListener("spn:themechange", () => {
-    if (CURRENT_CACHE_KEY) runAnalysis();
-    if (INSITU_RENDERED) runInsitu();
-    if (DEGGO_RENDERED) runDegGo();
-  });
+  // Theme changes restyle existing plots through the shared helpers in main.js.
 })();
