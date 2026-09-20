@@ -23,16 +23,19 @@ SpiderNet requires Python 3.11. We recommend creating a clean conda environment:
 ```bash
 conda create -n SpiderNet_env python=3.11.8
 conda activate SpiderNet_env
+python -c "import sys; print(sys.executable); print(sys.version)"
 ```
+
+Confirm that the interpreter belongs to `SpiderNet_env` and reports Python 3.11 before installing packages. Activate this environment again whenever you open a new terminal; a new terminal may otherwise use a different system Python. If you chose another environment name, substitute it for `SpiderNet_env` throughout this guide. On Windows, use Anaconda Prompt or a terminal already configured for conda.
 
 ### 1. Install PyTorch and PyTorch Geometric
 
 Install PyTorch and PyG before SpiderNet. Their installation depends on the operating system and CPU/CUDA environment. The recorded CUDA 11.7 setup uses:
 
 ```bash
-pip install torch==2.0.0 torchvision==0.15.1 --index-url https://download.pytorch.org/whl/cu117
-pip install torch-geometric==2.7.0
-pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-2.0.0+cu117.html
+python -m pip install torch==2.0.0 torchvision==0.15.1 --index-url https://download.pytorch.org/whl/cu117
+python -m pip install torch-geometric==2.7.0
+python -m pip install torch-scatter torch-sparse -f https://data.pyg.org/whl/torch-2.0.0+cu117.html
 ```
 
 For a different CUDA version or a CPU-only environment, install the matching [PyTorch](https://pytorch.org/get-started/previous-versions/) and [PyG](https://pytorch-geometric.readthedocs.io/en/latest/install/installation.html) builds. Saved data and checkpoints also need compatible library versions; see the [reproduction instructions](docs/REPRODUCIBILITY.md).
@@ -44,13 +47,13 @@ Clone the repository and install from its root:
 ```bash
 git clone https://github.com/ma-compbio-lab/SpiderNet.git
 cd SpiderNet
-pip install .
+python -m pip install .
 ```
 
 For development or running the repository workflows, use editable installation:
 
 ```bash
-pip install -e .
+python -m pip install -e .
 ```
 
 The installable source is under `SpiderNet/SpiderNet/`; the root `pyproject.toml` locates it automatically. The Python package can be installed without downloading study data.
@@ -193,13 +196,15 @@ The data collection contains saved results, plotting inputs, interactive dataset
 
 ## Reproduce the study results
 
-During peer review, download the ZIP archives using the supplied reviewer link and keep their filenames unchanged. From the repository root, list the required bundles and restore one study:
+During peer review, download the ZIP archives using the supplied reviewer link and keep their filenames unchanged. Activate the installed `SpiderNet_env` environment and work from the repository root. Replace `/path/to/archives` below with the actual directory containing the downloaded ZIPs, keeping the quotation marks around paths that contain spaces. For example, a Windows path can be written as `"D:/SpiderNet data/archives"`.
+
+List the required bundles and restore one study:
 
 ```bash
 python scripts/data.py list
 
 # Replace /path/to/archives with the folder containing the downloaded ZIPs.
-python scripts/data.py restore --profile plot-agingbrain --archive-dir /path/to/archives
+python scripts/data.py restore --profile plot-agingbrain --archive-dir "/path/to/archives"
 python scripts/data.py verify --profile plot-agingbrain
 
 # Check the required inputs before rendering the saved-result figures.
@@ -237,16 +242,26 @@ SpiderNet-Interactive is a local Flask application for exploring trained SpiderN
 | **M3: MI cascades** | Permutation-tested MI cascades, cell-type triplets, spatial displays, and associated gene programs |
 | **M4: Spatial perturbation** | In silico gene knockdown or cell-type replacement using the trained model |
 
-Start from the **repository root**, identified by `Tutorial/` and `scripts/data.py`. If you are in the inner `SpiderNet/` project directory, run `cd ..` first. Install the UI dependencies and restore the interactive data profile:
+First complete the package and PyTorch/PyG installation above. Start from the **repository root**, identified by `Tutorial/` and `scripts/data.py`. If you are in the inner `SpiderNet/` project directory, run `cd ..` first.
+
+In a newly opened terminal, navigate to your checkout and reactivate the installed environment. On Windows CMD/Anaconda Prompt, use `cd /d "D:\path\to\SpiderNet"` to change both drive and directory; replace that example with your actual checkout path. In PowerShell, macOS, or Linux, use `cd "path/to/SpiderNet"` with your actual path.
+
+Run the following commands one at a time. Confirm that the interpreter is in your intended environment and reports Python 3.11 before continuing; stop and inspect any error before running the next command. Replace `/path/to/archives` with the actual ZIP directory, for example `"D:/SpiderNet data/archives"` on Windows. Keep the path quoted.
 
 ```bash
+conda activate SpiderNet_env
+python -c "import sys; print(sys.executable); print(sys.version)"
 python -m pip install -r requirements-UI.txt
-python scripts/data.py restore --profile interactive --archive-dir /path/to/archives
+python -m pip check
+python scripts/data.py restore --profile interactive --archive-dir "/path/to/archives"
+python scripts/data.py verify --profile interactive
 cd SpiderNet/SpiderNet-interactive
 python app.py
 ```
 
-Open **http://localhost:8000**. The application discovers prepared `_UI` datasets under `SpiderNet/Interactivetool/SpiderNet-interactive_V2/`; restart after adding a dataset. Analyses use saved data and caches, while some requests compute additional results or run inference. See the [application guide](SpiderNet/SpiderNet-interactive/README.md) for dataset requirements, caching, and configuration.
+After the server reports that it is running, open **http://localhost:8000** in your browser. Keep the terminal open while using the application; press **Ctrl+C** in that terminal to stop the server.
+
+The application discovers prepared `_UI` datasets under `SpiderNet/Interactivetool/SpiderNet-interactive_V2/`; restart after adding a dataset. Analyses use saved data and caches, while some requests compute additional results or run inference. See the [application guide](SpiderNet/SpiderNet-interactive/README.md) for dataset requirements, caching, and configuration.
 
 ---
 
