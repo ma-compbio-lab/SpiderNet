@@ -2436,6 +2436,22 @@ def compute_permutation_colocalization(F_cut, A, unique_pairs, nperm=100):
 
     return np.stack(colocal_count_perm_list, axis=0)
 
+def permutation_upper_tail_pvalues(observed, permuted):
+    """Finite-permutation upper-tail P values, counting ties as exceedances.
+
+    The first axis of ``permuted`` indexes B random permutations. Including
+    the observed configuration gives (b + 1) / (B + 1), even when b is zero.
+    """
+    observed = np.asarray(observed)
+    permuted = np.asarray(permuted)
+    if permuted.ndim != observed.ndim + 1 or permuted.shape[1:] != observed.shape:
+        raise ValueError("Permutation counts must have shape (B, *observed.shape).")
+    if permuted.shape[0] == 0:
+        raise ValueError("At least one permutation is required.")
+    exceedances = np.count_nonzero(permuted >= observed[None, ...], axis=0)
+    return (exceedances + 1) / (permuted.shape[0] + 1)
+
+
 def compute_statistics(colocal_count_cur, colocal_count_perm_array):
     # Purpose: compare the observed colocalization matrix against the permutation
     # null distribution and compute effect-size-like scores and p-values.
@@ -2456,13 +2472,11 @@ def compute_statistics(colocal_count_cur, colocal_count_perm_array):
     pvalue_matrix : np.ndarray
         Permutation-based p-value matrix of shape (d, d).
     """
-    count_matrix = np.sum(colocal_count_cur[None, :, :] > colocal_count_perm_array, axis=0)
-
     colocal_count_ratio_cur = (
         colocal_count_cur - colocal_count_perm_array.mean(axis=0)
     ) / (colocal_count_perm_array.std(axis=0) + 1e-8)
 
-    pvalue_matrix = 1 - count_matrix / colocal_count_perm_array.shape[0]
+    pvalue_matrix = permutation_upper_tail_pvalues(colocal_count_cur, colocal_count_perm_array)
     return colocal_count_ratio_cur, pvalue_matrix
 
 def fdr_correct_pvals(pvals, alpha=0.05):
@@ -2569,7 +2583,7 @@ def MI_colocalization_analysis(
     fdr_alpha=0.05,
     celltype_col="cell.types",
     progress_every=5,
-    min_pvalue=1e-5,
+    min_pvalue=None,
     pvalue_adjusted_threshold = 0.001,
     zscore_countcolocal_threshold = 1.3
 ):
@@ -2597,8 +2611,9 @@ def MI_colocalization_analysis(
         Column name in adata.obs storing cell-type labels.
     progress_every : int
         Print progress every `progress_every` samples.
-    min_pvalue : float
-        Lower bound used to avoid exact zeros in merged p-values.
+    min_pvalue : float or None
+        Deprecated compatibility argument, ignored. P-values now use the
+        finite-permutation correction (b + 1) / (B + 1), without a floor.
 
     Returns
     -------
@@ -2675,11 +2690,9 @@ def MI_colocalization_analysis(
     # -----------------------------
     # Compute merged permutation p-values
     # -----------------------------
-    colocal_count_merge_sum_pvalue = 1 - np.mean(
-        colocal_count_merge_sum[None, :, :] > colocal_count_perm_array_merge_sum,
-        axis=0
+    colocal_count_merge_sum_pvalue = permutation_upper_tail_pvalues(
+        colocal_count_merge_sum, colocal_count_perm_array_merge_sum
     )
-    colocal_count_merge_sum_pvalue[colocal_count_merge_sum_pvalue < 1e-8] = min_pvalue
 
     # -----------------------------
     # Convert to DataFrame
@@ -2752,6 +2765,7 @@ def MI_colocalization_analysis(
         "MI_threshold": MI_threshold,
         "nperm": nperm,
         "fdr_alpha": fdr_alpha,
+        "pvalue_method": "plus1",
     }
 
 import numpy as np

@@ -72,6 +72,7 @@ def check(results_dir: Path) -> list[str]:
     root = Path(results_dir)
     paths = [
         root / "MI_colocal_summary_by_cancertype.csv",
+        root / "MIcascade_pvalue_method.json",
         root / "Celltype_triple_prop_within_cancertype_cancercell_pivot_unionMIs.csv",
         root / "Celltype_triple_prop_within_cancertype_long.csv",
         root / "Celltype_triple_prop_selected_MI-7_MI-4_cancercell.csv",
@@ -143,6 +144,12 @@ def run(results_dir: Path, output_dir: Path) -> list[Path]:
 
     execute("cascade-imports")
     execute("cascade-thresholds")
+    pvalue_metadata = results_dir / "MIcascade_pvalue_method.json"
+    if not pvalue_metadata.is_file():
+        raise ValueError("Cascade summaries need +1-corrected P-values. Run the cascade analysis to regenerate the summary tables and MIcascade_pvalue_method.json from the saved permutation counts.")
+    pvalue_method = json.loads(pvalue_metadata.read_text(encoding="utf-8"))
+    if pvalue_method.get("pvalue_method") != "plus1":
+        raise ValueError("Historical floored cascade P-values cannot be plotted with the new cutoff; regenerate the cascade summary tables using the +1 correction.")
     summary = _read_csv(results_dir / "MI_colocal_summary_by_cancertype.csv")
     ns["cancertype_list"] = summary["CancerType"].drop_duplicates().tolist()
     ns["sampleindex_to_cancertype"] = {}
