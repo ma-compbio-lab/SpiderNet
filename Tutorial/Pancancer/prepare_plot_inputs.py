@@ -167,7 +167,7 @@ def prepare_cascade(results, processed_dir, bundle):
     # The three lists are already loaded or supplied by the exact saved cache.
     metadata = metadata[metadata.index("samples_name_list ="):]
     exec(metadata, env)
-    exec(_one(cells, "pvalue_thresold = 1e-3"), env)
+    exec(_one(cells, "pvalue_thresold = "), env)
     cache_path = results / "MIcascade_colocalization_cache/MIcascade_colocalization_cache_MIthreshold0p5_nperm100.pkl"
     print("Loading saved normalization and adjacency; no permutations are run.", flush=True)
     cache = pd.read_pickle(cache_path)
